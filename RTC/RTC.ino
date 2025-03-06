@@ -15,7 +15,7 @@ const char* ssid     = "Fairuz";
 const char* password = "ILoveMyKids1!";
 
 unsigned long lastUpdate = 0;
-const unsigned long updateInterval = 86400000; // 24 hours in milliseconds
+const unsigned long updateInterval = 86400000; // 24 hours in millisec
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", -25200, 60000);
