@@ -68,11 +68,11 @@ void loop() {
   int hour = now.hour();
   int minute = now.minute();
 
-  if (hour == 5 && minute == 0 && !motorRunning) {
-    startMotor(false); // Open door (CCW) at 5 AM
+  if (hour == 6 && minute == 0 && !motorRunning) {
+    startMotor(false); // Open door (CCW) at 6 AM
     isOpeningDoor = true;
-  } else if (hour == 21 && minute == 0 && !motorRunning) {
-    startMotor(true); // Close door (CW) at 9 PM
+  } else if (hour == 20 && minute == 0 && !motorRunning) {
+    startMotor(true); // Close door (CW) at 8 PM
     isOpeningDoor = false;
   }
 
