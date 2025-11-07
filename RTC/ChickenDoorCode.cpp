@@ -6,8 +6,8 @@
 
 #define MOTOR_FORWARD_PIN 5
 #define MOTOR_BACKWARD_PIN 18
-#define LIMIT_SWITCH_PIN 27   // Closed position switch (example)
-#define LIMIT_SWITCH_PIN2 25  // Open position switch (example)
+#define LIMIT_SWITCH_PIN 27   // Closed position switch 
+#define LIMIT_SWITCH_PIN2 25  // Open position switch 
 
 RTC_PCF8523 rtc;
 
@@ -18,7 +18,7 @@ unsigned long lastUpdate = 0;
 const unsigned long updateInterval = 86400000UL; // 24 hours
 
 WiFiUDP ntpUDP;
-// -25200 = UTC-7; if you need DST awareness, replace with a TZ approach.
+// -25200 = UTC-7;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", -25200, 60000);
 
 // Motor / motion state
@@ -120,7 +120,7 @@ void loop() {
 
     // ---- Handle limit switches (from ISRs) ----
     if (motorRunning) {
-        // Snapshot & clear flags atomically-ish
+        // Snapshot & clear flags atomically
         bool l1 = limit1Triggered;
         bool l2 = limit2Triggered;
         if (l1) limit1Triggered = false;
@@ -175,7 +175,7 @@ void stopMotor() {
 
 void updateRTCTime() {
     if (WiFi.status() == WL_CONNECTED) {
-        // Try a forced update to avoid using cached stale time
+        // forced update to avoid using cached stale time
         if (!timeClient.update()) {
             timeClient.forceUpdate();
         }
@@ -186,4 +186,5 @@ void updateRTCTime() {
     else {
         Serial.println("WiFi not connected; skipping RTC update");
     }
+
 }
