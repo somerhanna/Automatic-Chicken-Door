@@ -9,3 +9,5 @@ Additional features to be included: An app you can access from the iPhone to man
 Video of my old build (to get an idea):
 
 youtube.com/watch?v=uHuY0z5CEHo&feature=youtu.be
+
+It uses an L298n motor driver, PCF8523 RTC, and an ESP32 as microcontroller.
