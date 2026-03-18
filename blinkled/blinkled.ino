@@ -4,6 +4,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+// <-- NEW: Add BLE libraries
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+#include <BLE2902.h>
+
 // -------- OLED --------
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -25,6 +31,68 @@ const char* NTP2 = "time.nist.gov";
 // -------- Limit switch --------
 constexpr int LIMIT_PIN = 18;          // pick any safe GPIO (18 is usually fine)
 constexpr bool PRESSED_LEVEL = LOW;    // with INPUT_PULLUP + switch to GND
+
+// <-- NEW: BLE UUIDs - these must match your app!
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+// <-- NEW: BLE Server objects
+BLEServer* pServer = NULL;
+BLECharacteristic* pCharacteristic = NULL;
+bool deviceConnected = false;
+
+// <-- NEW: BLE callback classes
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("📱 iPhone Connected!");
+      showMessage("iPhone", "Connected!");
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("📱 iPhone Disconnected");
+      showMessage("iPhone", "Disconnected");
+      
+      // Restart advertising so iPhone can reconnect
+      pServer->startAdvertising();
+    }
+};
+
+class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string value = pCharacteristic->getValue();
+      
+      if (value.length() > 0) {
+        Serial.print("📱 Received from iPhone: ");
+        Serial.println(value.c_str());
+        
+        // Parse the command
+        if (value == "add_hour") {
+          addOffsetSeconds(3600); // +1 hour
+          Serial.println("➕ Added 1 hour from iPhone");
+        }
+        else if (value == "add_30min") {
+          addOffsetSeconds(1800); // +30 minutes
+          Serial.println("➕ Added 30 minutes from iPhone");
+        }
+        else if (value == "add_15min") {
+          addOffsetSeconds(900); // +15 minutes
+          Serial.println("➕ Added 15 minutes from iPhone");
+        }
+        else if (value == "get_time") {
+          // Send current time back to iPhone (optional)
+          char timeStr[50];
+          time_t now = time(nullptr) + getOffsetSeconds();
+          struct tm timeinfo;
+          localtime_r(&now, &timeinfo);
+          strftime(timeStr, sizeof(timeStr), "%I:%M:%S %p", &timeinfo);
+          pCharacteristic->setValue(timeStr);
+          pCharacteristic->notify();
+        }
+      }
+    }
+};
 
 // -------- Shared state --------
 // We add an offset (seconds) when the switch is pressed.
@@ -122,7 +190,13 @@ void displayTask(void* pv) {
       display.setCursor(0, 56);
       display.print("+");
       display.print(getOffsetSeconds() / 3600);
-      display.print("h offset");
+      display.print("h ");
+      
+      // <-- NEW: Show BLE connection status on display
+      if (deviceConnected) {
+        display.print("📱");
+      }
+      
     } else {
       display.setTextSize(1);
       display.setCursor(0, 0);
@@ -134,8 +208,21 @@ void displayTask(void* pv) {
   }
 }
 
+// <-- NEW: BLE Task to handle advertising
+void bleTask(void* pv) {
+  for (;;) {
+    if (!deviceConnected) {
+      // Advertise every 5 seconds when not connected
+      vTaskDelay(pdMS_TO_TICKS(5000));
+    } else {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
+  Serial.println("\n\n🚀 Chicken Door Controller Starting...");
 
   // Mutex for shared offset
   g_timeMutex = xSemaphoreCreateMutex();
@@ -151,9 +238,43 @@ void setup() {
   // Limit switch pin
   pinMode(LIMIT_PIN, INPUT_PULLUP);
 
-  showMessage("OLED OK", "Connecting WiFi...");
+  showMessage("OLED OK", "Starting BLE...");
+
+  // <-- NEW: Initialize BLE
+  BLEDevice::init("ChickenDoor"); // This name will appear on your iPhone
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+  
+  // Create the BLE Service
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  
+  // Create a Characteristic
+  pCharacteristic = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID,
+                      BLECharacteristic::PROPERTY_READ |
+                      BLECharacteristic::PROPERTY_WRITE |
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+  
+  pCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
+  pCharacteristic->addDescriptor(new BLE2902());
+  
+  // Start the service
+  pService->start();
+  
+  // Start advertising
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);  // helps with iPhone connections
+  pAdvertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+  
+  Serial.println("📱 BLE Started - Waiting for iPhone connection...");
+  showMessage("BLE Ready", "iPhone can connect");
 
   // Connect WiFi (only for initial NTP sync)
+  Serial.println("Connecting to WiFi...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
@@ -167,7 +288,7 @@ void setup() {
   if (WiFi.status() != WL_CONNECTED) {
     showMessage("WiFi FAILED", "Time may be wrong");
   } else {
-    showMessage("WiFi connected", WiFi.localIP().toString().c_str());
+    showMessage("WiFi connected", "Syncing time...");
 
     // Set timezone + start SNTP
     configTzTime(TZ_INFO, NTP1, NTP2);
@@ -182,12 +303,15 @@ void setup() {
     // Optional: disconnect WiFi after time sync (keeps time locally)
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
+    Serial.println("WiFi disconnected to save power");
   }
 
-  // Create two tasks (threads)
-  // Pin tasks to different cores for smoother behavior.
+  // Create three tasks
   xTaskCreatePinnedToCore(limitSwitchTask, "LimitSwitch", 2048, nullptr, 2, nullptr, 0);
   xTaskCreatePinnedToCore(displayTask,     "Display",     4096, nullptr, 1, nullptr, 1);
+  xTaskCreatePinnedToCore(bleTask,         "BLE",         2048, nullptr, 1, nullptr, 1); // <-- NEW
+  
+  Serial.println("All tasks started!");
 }
 
 void loop() {
