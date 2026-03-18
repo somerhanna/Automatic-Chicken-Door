@@ -1,14 +1,135 @@
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+
+// -------- BLE UUIDs --------
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+// -------- Limit switch --------
+constexpr int LIMIT_PIN = 18;
+constexpr bool PRESSED_LEVEL = LOW;
+
+// -------- Shared state --------
+static int32_t g_timeOffsetSeconds = 0;
+static bool deviceConnected = false;
+
+BLEServer* pServer = NULL;
+BLECharacteristic* pCharacteristic = NULL;
+
+// ========== BLE CALLBACKS ==========
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("✅ iPhone Connected");
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("❌ iPhone Disconnected");
+      pServer->startAdvertising();
+    }
+};
+
+class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      String value = pCharacteristic->getValue().c_str();
+      
+      if (value.length() > 0) {
+        Serial.print("📱 Command: ");
+        Serial.println(value);
+        
+        if (value == "add_hour") {
+          g_timeOffsetSeconds += 3600;
+          Serial.print("  New offset: ");
+          Serial.print(g_timeOffsetSeconds / 3600);
+          Serial.println(" hours");
+        }
+        else if (value == "add_30min") {
+          g_timeOffsetSeconds += 1800;
+        }
+        else if (value == "add_15min") {
+          g_timeOffsetSeconds += 900;
+        }
+      }
+    }
+};
+
+// ========== LIMIT SWITCH TASK ==========
+void limitSwitchTask(void* pv) {
+  bool lastPressed = false;
+  uint32_t lastChangeMs = 0;
+  uint32_t bootTime = millis();
+
+  for (;;) {
+    bool pressedNow = (digitalRead(LIMIT_PIN) == PRESSED_LEVEL);
+    uint32_t nowMs = millis();
+    
+    if (pressedNow != lastPressed && (nowMs - lastChangeMs) > 50) {
+      lastChangeMs = nowMs;
+      lastPressed = pressedNow;
+      
+      if (pressedNow && (nowMs - bootTime > 3000)) {
+        g_timeOffsetSeconds += 3600;
+        Serial.println("🔘 Switch: +1 hour");
+      }
+    }
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+  }
+}
+
+// ========== SETUP ==========
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  Serial.println("\n\n🚀 MINIMAL CHICKEN DOOR");
+  Serial.println("========================");
+  
+  // Limit switch
+  pinMode(LIMIT_PIN, INPUT_PULLUP);
+  
+  // Initialize BLE (minimal)
+  Serial.println("Starting BLE...");
+  BLEDevice::init("ChickenDoor");
+  
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+  
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  
+  pCharacteristic = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID,
+                      BLECharacteristic::PROPERTY_WRITE
+                    );
+  pCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
+  
+  pService->start();
+  
+  // Simple advertising
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  BLEDevice::startAdvertising();
+  
+  Serial.println("✅ Advertising as: ChickenDoor");
+  Serial.println("📱 Look in LightBlue app now!");
+  
+  // Create limit switch task
+  xTaskCreatePinnedToCore(limitSwitchTask, "Limit", 2048, NULL, 1, NULL, 0);
+}
+
+void loop() {
+  delay(1000);
+}
+/*
 #include <WiFi.h>
 #include <time.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// <-- NEW: Add BLE libraries
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEServer.h>
-#include <BLE2902.h>
+// Use NimBLE instead of default BLE library
+#include <NimBLEDevice.h>
 
 // -------- OLED --------
 #define SCREEN_WIDTH 128
@@ -19,88 +140,28 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 constexpr int I2C_SDA = 21;
 constexpr int I2C_SCL = 22;
 
-// -------- WiFi / NTP (only at boot) --------
+// -------- WiFi / NTP --------
 const char* ssid     = "Fairuz";
 const char* password = "ILoveMyKids1!";
-
-// Change timezone string if needed:
 const char* TZ_INFO = "PST8PDT,M3.2.0/2,M11.1.0/2";
-const char* NTP1 = "pool.ntp.org";
-const char* NTP2 = "time.nist.gov";
 
 // -------- Limit switch --------
-constexpr int LIMIT_PIN = 18;          // pick any safe GPIO (18 is usually fine)
-constexpr bool PRESSED_LEVEL = LOW;    // with INPUT_PULLUP + switch to GND
+constexpr int LIMIT_PIN = 18;
+constexpr bool PRESSED_LEVEL = LOW;
 
-// <-- NEW: BLE UUIDs - these must match your app!
+// -------- BLE UUIDs --------
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-// <-- NEW: BLE Server objects
-BLEServer* pServer = NULL;
-BLECharacteristic* pCharacteristic = NULL;
-bool deviceConnected = false;
-
-// <-- NEW: BLE callback classes
-class MyServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
-      deviceConnected = true;
-      Serial.println("📱 iPhone Connected!");
-      showMessage("iPhone", "Connected!");
-    };
-
-    void onDisconnect(BLEServer* pServer) {
-      deviceConnected = false;
-      Serial.println("📱 iPhone Disconnected");
-      showMessage("iPhone", "Disconnected");
-      
-      // Restart advertising so iPhone can reconnect
-      pServer->startAdvertising();
-    }
-};
-
-class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string value = pCharacteristic->getValue();
-      
-      if (value.length() > 0) {
-        Serial.print("📱 Received from iPhone: ");
-        Serial.println(value.c_str());
-        
-        // Parse the command
-        if (value == "add_hour") {
-          addOffsetSeconds(3600); // +1 hour
-          Serial.println("➕ Added 1 hour from iPhone");
-        }
-        else if (value == "add_30min") {
-          addOffsetSeconds(1800); // +30 minutes
-          Serial.println("➕ Added 30 minutes from iPhone");
-        }
-        else if (value == "add_15min") {
-          addOffsetSeconds(900); // +15 minutes
-          Serial.println("➕ Added 15 minutes from iPhone");
-        }
-        else if (value == "get_time") {
-          // Send current time back to iPhone (optional)
-          char timeStr[50];
-          time_t now = time(nullptr) + getOffsetSeconds();
-          struct tm timeinfo;
-          localtime_r(&now, &timeinfo);
-          strftime(timeStr, sizeof(timeStr), "%I:%M:%S %p", &timeinfo);
-          pCharacteristic->setValue(timeStr);
-          pCharacteristic->notify();
-        }
-      }
-    }
-};
-
 // -------- Shared state --------
-// We add an offset (seconds) when the switch is pressed.
-// Accessed from both tasks -> protect with a mutex.
 static int32_t g_timeOffsetSeconds = 0;
 static SemaphoreHandle_t g_timeMutex;
+static bool deviceConnected = false;
 
-// Simple helper to safely read the offset
+// Characteristic pointer for sending data back
+static NimBLECharacteristic* pCharacteristic = NULL;
+
+// ========== FUNCTION DEFINITIONS ==========
 static int32_t getOffsetSeconds() {
   int32_t v;
   xSemaphoreTake(g_timeMutex, portMAX_DELAY);
@@ -109,14 +170,12 @@ static int32_t getOffsetSeconds() {
   return v;
 }
 
-// Safely add to offset
 static void addOffsetSeconds(int32_t delta) {
   xSemaphoreTake(g_timeMutex, portMAX_DELAY);
   g_timeOffsetSeconds += delta;
   xSemaphoreGive(g_timeMutex);
 }
 
-// -------- Display helpers --------
 static void showMessage(const char* line1, const char* line2 = "") {
   display.clearDisplay();
   display.setTextSize(1);
@@ -127,194 +186,245 @@ static void showMessage(const char* line1, const char* line2 = "") {
   display.display();
 }
 
-// -------- Task 1: Limit switch watcher --------
-void limitSwitchTask(void* pv) {
-  (void)pv;
+// ========== NIMBLE CALLBACKS ==========
+class ServerCallbacks: public NimBLEServerCallbacks {
+    void onConnect(NimBLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("\n✅✅✅ IPHONE CONNECTED! ✅✅✅");
+      Serial.print("  Connection time (ms): ");
+      Serial.println(millis());
+      showMessage("iPhone", "Connected!");
+    };
 
-  bool lastPressed = false;
-  uint32_t lastChangeMs = 0;
+    void onDisconnect(NimBLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("\n❌❌❌ IPHONE DISCONNECTED! ❌❌❌");
+      showMessage("iPhone", "Disconnected");
+      pServer->startAdvertising();
+      Serial.println("📡 Advertising restarted");
+    }
+};
+
+class CharCallbacks: public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* pCharacteristic) {
+      std::string value = pCharacteristic->getValue();
+      if (value.length() > 0) {
+        Serial.print("\n📱 RECEIVED COMMAND: [");
+        Serial.print(value.c_str());
+        Serial.println("]");
+        
+        if (value == "add_hour") {
+          addOffsetSeconds(3600);
+          Serial.println("  ➡️ Added 1 hour");
+        }
+        else if (value == "add_30min") {
+          addOffsetSeconds(1800);
+          Serial.println("  ➡️ Added 30 minutes");
+        }
+        else if (value == "add_15min") {
+          addOffsetSeconds(900);
+          Serial.println("  ➡️ Added 15 minutes");
+        }
+      }
+    }
+};
+
+// ========== TASKS ==========
+void limitSwitchTask(void* pv) {
+  // Wait for hardware to stabilize
+  vTaskDelay(1500 / portTICK_PERIOD_MS);
+  
+  bool lastPressed = (digitalRead(LIMIT_PIN) == PRESSED_LEVEL);
+  uint32_t lastChangeMs = millis();
+  
+  // Record when we started
+  uint32_t bootTime = millis();
 
   for (;;) {
     bool pressedNow = (digitalRead(LIMIT_PIN) == PRESSED_LEVEL);
-
-    // Basic debounce: require 50ms stable change
     uint32_t nowMs = millis();
+    
     if (pressedNow != lastPressed && (nowMs - lastChangeMs) > 50) {
       lastChangeMs = nowMs;
       lastPressed = pressedNow;
-
-      // Trigger on press edge (not release)
+      
       if (pressedNow) {
-        addOffsetSeconds(3600); // +1 hour
-        Serial.println("Limit switch pressed: +1 hour");
+        if (nowMs - bootTime > 3000) {
+          addOffsetSeconds(3600);
+          Serial.println("✅ Switch pressed: +1 hour");
+        } else {
+          Serial.println("⏳ Ignoring press during startup");
+        }
       }
     }
-
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 
-// -------- Task 2: OLED time display --------
 void displayTask(void* pv) {
-  (void)pv;
-
   for (;;) {
-    // Get system epoch time (kept by ESP32 after initial NTP sync)
-    time_t now = time(nullptr);
-
-    // Apply our manual offset
-    now += getOffsetSeconds();
-
-    // Convert to local time (timezone already configured)
+    time_t rawNow = time(nullptr);
+    int32_t offset = getOffsetSeconds();
+    time_t displayTime = rawNow + offset;
+    
     struct tm timeinfo;
-    localtime_r(&now, &timeinfo);
+    localtime_r(&displayTime, &timeinfo);
 
     display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
 
-    if (now > 100000) { // crude "time seems set" check
-      char timeStr[16];
-      char dateStr[24];
-
-      strftime(timeStr, sizeof(timeStr), "%I:%M:%S %p", &timeinfo);
-      strftime(dateStr, sizeof(dateStr), "%a %b %d, %Y", &timeinfo);
-
+    // Check if time is valid (year >= 2020)
+    if (timeinfo.tm_year >= 120) {
+      char timeStr[9];
+      strftime(timeStr, 9, "%H:%M:%S", &timeinfo);
+      
       display.setTextSize(2);
       display.setCursor(0, 0);
       display.println(timeStr);
 
       display.setTextSize(1);
-      display.setCursor(0, 40);
-      display.println(dateStr);
-
-      display.setCursor(0, 56);
-      display.print("+");
-      display.print(getOffsetSeconds() / 3600);
-      display.print("h ");
-      
-      // <-- NEW: Show BLE connection status on display
-      if (deviceConnected) {
-        display.print("📱");
+      display.setCursor(0, 35);
+      if (offset > 0) {
+        display.print("+");
+        display.print(offset / 3600);
+        display.print("h");
       }
       
+      if (deviceConnected) {
+        display.setCursor(90, 56);
+        display.print("BLE");
+      }
     } else {
       display.setTextSize(1);
       display.setCursor(0, 0);
-      display.println("Time not set yet...");
+      display.println("Waiting for");
+      display.setCursor(0, 20);
+      display.println("time sync...");
+      
+      if (offset > 0) {
+        display.setCursor(0, 40);
+        display.print("Offset: +");
+        display.print(offset / 3600);
+        display.print("h");
+      }
     }
-
     display.display();
-    vTaskDelay(pdMS_TO_TICKS(250));
+    vTaskDelay(250 / portTICK_PERIOD_MS);
   }
 }
 
-// <-- NEW: BLE Task to handle advertising
-void bleTask(void* pv) {
-  for (;;) {
-    if (!deviceConnected) {
-      // Advertise every 5 seconds when not connected
-      vTaskDelay(pdMS_TO_TICKS(5000));
-    } else {
-      vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-  }
-}
-
+// ========== SETUP ==========
 void setup() {
   Serial.begin(115200);
-  Serial.println("\n\n🚀 Chicken Door Controller Starting...");
-
-  // Mutex for shared offset
-  g_timeMutex = xSemaphoreCreateMutex();
-
-  // I2C + OLED
-  Wire.begin(I2C_SDA, I2C_SCL);
-
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println("SSD1306 init failed. Try 0x3D or check wiring.");
-    while (true) delay(1000);
+  // Give serial time to initialize
+  delay(1000);
+  
+  Serial.println("\n\n=================================");
+  Serial.println("🚀 CHICKEN DOOR ESP32 STARTING");
+  Serial.println("=================================");
+  
+  Serial.print("ESP32 Chip Model: ");
+  Serial.println(ESP.getChipModel());
+  Serial.print("Flash Size: ");
+  Serial.println(ESP.getFlashChipSize());
+  
+  Serial.println("\n📡 Initializing BLE...");
+  
+  // Initialize BLE with error checking
+  try {
+    NimBLEDevice::init("ChickenDoor");
+    Serial.println("  ✅ BLE Device initialized");
+    
+    NimBLEServer* pServer = NimBLEDevice::createServer();
+    Serial.println("  ✅ BLE Server created");
+    
+    pServer->setCallbacks(new ServerCallbacks());
+    Serial.println("  ✅ Server callbacks set");
+    
+    NimBLEService* pService = pServer->createService(SERVICE_UUID);
+    Serial.println("  ✅ Service created");
+    Serial.print("     UUID: ");
+    Serial.println(SERVICE_UUID);
+    
+    pCharacteristic = pService->createCharacteristic(
+                        CHARACTERISTIC_UUID,
+                        NIMBLE_PROPERTY::WRITE
+                      );
+    Serial.println("  ✅ Characteristic created");
+    Serial.print("     UUID: ");
+    Serial.println(CHARACTERISTIC_UUID);
+    
+    pCharacteristic->setCallbacks(new CharCallbacks());
+    Serial.println("  ✅ Characteristic callbacks set");
+    
+    pService->start();
+    Serial.println("  ✅ Service started");
+    
+    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->start();
+    Serial.println("  ✅ Advertising started");
+    
+    Serial.println("\n📡 BLE is now advertising as: ChickenDoor");
+    Serial.println("   Look for this name in BLE scanner apps");
+    
+  } catch (const std::exception& e) {
+    Serial.print("❌ BLE initialization failed: ");
+    Serial.println(e.what());
+  } catch (...) {
+    Serial.println("❌ Unknown BLE initialization error");
   }
 
-  // Limit switch pin
+  g_timeMutex = xSemaphoreCreateMutex();
+
+  // OLED
+  Wire.begin(I2C_SDA, I2C_SCL);
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("❌ Display failed");
+    while (true) delay(1000);
+  }
+  Serial.println("✅ OLED initialized");
+
   pinMode(LIMIT_PIN, INPUT_PULLUP);
+  showMessage("Chicken Door", "BLE Ready");
 
-  showMessage("OLED OK", "Starting BLE...");
-
-  // <-- NEW: Initialize BLE
-  BLEDevice::init("ChickenDoor"); // This name will appear on your iPhone
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
-  
-  // Create the BLE Service
-  BLEService *pService = pServer->createService(SERVICE_UUID);
-  
-  // Create a Characteristic
-  pCharacteristic = pService->createCharacteristic(
-                      CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_READ |
-                      BLECharacteristic::PROPERTY_WRITE |
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-  
-  pCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
-  pCharacteristic->addDescriptor(new BLE2902());
-  
-  // Start the service
-  pService->start();
-  
-  // Start advertising
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);  // helps with iPhone connections
-  pAdvertising->setMinPreferred(0x12);
-  BLEDevice::startAdvertising();
-  
-  Serial.println("📱 BLE Started - Waiting for iPhone connection...");
-  showMessage("BLE Ready", "iPhone can connect");
-
-  // Connect WiFi (only for initial NTP sync)
-  Serial.println("Connecting to WiFi...");
+  // === WIFI (QUICK) ===
+  Serial.println("\n📶 Connecting to WiFi...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
   uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 8000) {
     delay(200);
     Serial.print(".");
   }
   Serial.println();
 
-  if (WiFi.status() != WL_CONNECTED) {
-    showMessage("WiFi FAILED", "Time may be wrong");
-  } else {
-    showMessage("WiFi connected", "Syncing time...");
-
-    // Set timezone + start SNTP
-    configTzTime(TZ_INFO, NTP1, NTP2);
-
-    // Wait up to ~15s for time
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("✅ WiFi connected, getting time...");
+    configTzTime(TZ_INFO, "pool.ntp.org");
     struct tm tmp;
     start = millis();
-    while (!getLocalTime(&tmp) && millis() - start < 15000) {
+    while (!getLocalTime(&tmp) && millis() - start < 5000) {
       delay(200);
+      Serial.print(".");
     }
-
-    // Optional: disconnect WiFi after time sync (keeps time locally)
+    Serial.println();
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
-    Serial.println("WiFi disconnected to save power");
+    Serial.println("✅ Time synced, WiFi off");
+  } else {
+    Serial.println("⚠️ WiFi failed - time not set");
   }
 
-  // Create three tasks
-  xTaskCreatePinnedToCore(limitSwitchTask, "LimitSwitch", 2048, nullptr, 2, nullptr, 0);
-  xTaskCreatePinnedToCore(displayTask,     "Display",     4096, nullptr, 1, nullptr, 1);
-  xTaskCreatePinnedToCore(bleTask,         "BLE",         2048, nullptr, 1, nullptr, 1); // <-- NEW
+  // Create tasks
+  xTaskCreatePinnedToCore(limitSwitchTask, "Limit", 2048, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(displayTask, "Display", 2048, NULL, 1, NULL, 1);
   
-  Serial.println("All tasks started!");
+  Serial.println("\n✅ All tasks started!");
+  Serial.println("=================================\n");
 }
 
 void loop() {
-  // Nothing here; tasks do the work.
-  vTaskDelay(pdMS_TO_TICKS(1000));
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
+*/
