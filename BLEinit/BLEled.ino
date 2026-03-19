@@ -39,7 +39,7 @@ void setup() {
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   BLEDevice::startAdvertising();
-  
+  //connect
   Serial.println("ESP32-LED ready");
 }
 
