@@ -10,4 +10,4 @@ Video of my old build with servo motor:
 
 youtube.com/watch?v=uHuY0z5CEHo&feature=youtu.be
 
-It uses an L298n motor driver, PCF8523 RTC, and an ESP32 as microcontroller.
+ESP32 microcontroller, DRV8871 DC motor driver, 12V worm gear motor, IAN219 current detector, BH1750FVI light detector.
