@@ -1,0 +1,57 @@
+// Simple Motor Control - Single character commands
+#define IN1 26
+#define IN2 27
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+    
+    pinMode(IN1, OUTPUT);
+    pinMode(IN2, OUTPUT);
+    
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, LOW);
+    
+    Serial.println("=== Motor Control ===");
+    Serial.println("f = Forward | r = Reverse | s = Stop");
+    Serial.println("Just type the letter (no Enter needed)");
+}
+
+void loop() {
+    if (Serial.available()) {
+        char command = Serial.read();
+        
+        // Ignore newline characters
+        if (command == '\n' || command == '\r') {
+            return;
+        }
+        
+        switch (command) {
+            case 'f':
+            case 'F':
+                Serial.println("FORWARD");
+                digitalWrite(IN1, HIGH);
+                digitalWrite(IN2, LOW);
+                break;
+                
+            case 'r':
+            case 'R':
+                Serial.println("REVERSE");
+                digitalWrite(IN1, LOW);
+                digitalWrite(IN2, HIGH);
+                break;
+                
+            case 's':
+            case 'S':
+                Serial.println("STOP");
+                digitalWrite(IN1, LOW);
+                digitalWrite(IN2, LOW);
+                break;
+                
+            default:
+                Serial.print("'");
+                Serial.print(command);
+                Serial.println("' - Use f, r, or s");
+        }
+    }
+}
