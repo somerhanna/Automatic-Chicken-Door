@@ -1,0 +1,169 @@
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
+// Motor Control Pins
+#define IN1 26
+#define IN2 27
+
+// Motor State Machine
+enum MotorState {
+  MOTOR_IDLE,
+  MOTOR_FORWARD,
+  MOTOR_REVERSE
+};
+
+MotorState currentState = MOTOR_IDLE;
+bool deviceConnected = false;
+
+// BLE Objects
+BLEServer *pServer = nullptr;
+BLECharacteristic *pCharacteristic = nullptr;
+
+// Forward declarations
+void setMotorState(MotorState state);
+void sendStatus();
+
+class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      String value = pCharacteristic->getValue().c_str();
+      
+      Serial.print("Command received: ");
+      Serial.println(value);
+      
+      if (value == "start") {
+        if (currentState == MOTOR_IDLE) {
+          setMotorState(MOTOR_FORWARD);
+        }
+      }
+      else if (value == "stop") {
+        if (currentState != MOTOR_IDLE) {
+          setMotorState(MOTOR_IDLE);
+        }
+      }
+      else if (value == "reverse") {
+        if (currentState == MOTOR_FORWARD) {
+          setMotorState(MOTOR_REVERSE);
+        }
+        else if (currentState == MOTOR_REVERSE) {
+          setMotorState(MOTOR_FORWARD);
+        }
+      }
+      else if (value == "status") {
+        sendStatus();
+      }
+    }
+};
+
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("✅ Client connected!");
+      sendStatus();
+    }
+    
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("❌ Client disconnected");
+      // Restart advertising immediately
+      pServer->startAdvertising();
+      Serial.println("Advertising restarted - waiting for connection");
+    }
+};
+
+void setMotorState(MotorState state) {
+  currentState = state;
+  
+  switch (currentState) {
+    case MOTOR_IDLE:
+      Serial.println("Motor: STOPPED");
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, LOW);
+      break;
+      
+    case MOTOR_FORWARD:
+      Serial.println("Motor: FORWARD");
+      digitalWrite(IN1, HIGH);
+      digitalWrite(IN2, LOW);
+      break;
+      
+    case MOTOR_REVERSE:
+      Serial.println("Motor: REVERSE");
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, HIGH);
+      break;
+  }
+  
+  sendStatus();
+}
+
+void sendStatus() {
+  if (deviceConnected && pCharacteristic != nullptr) {
+    String status = "";
+    switch (currentState) {
+      case MOTOR_IDLE:
+        status = "STATUS:IDLE";
+        break;
+      case MOTOR_FORWARD:
+        status = "STATUS:FORWARD";
+        break;
+      case MOTOR_REVERSE:
+        status = "STATUS:REVERSE";
+        break;
+    }
+    pCharacteristic->setValue(status.c_str());
+    pCharacteristic->notify();
+    Serial.println("Status sent: " + status);
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  // Initialize motor pins
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  
+  Serial.println("\n==================================");
+  Serial.println("🐔 Chicken Door Motor Controller");
+  Serial.println("==================================");
+  
+  // Initialize BLE
+  BLEDevice::init("ESP32-LED");
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+  
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  pCharacteristic = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID,
+                      BLECharacteristic::PROPERTY_WRITE |
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+  pCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
+  
+  pService->start();
+  
+  // Configure advertising
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);
+  pAdvertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+  
+  Serial.println("BLE Ready - Device: ESP32-LED");
+  Serial.println("Commands: start, stop, reverse, status");
+  Serial.println("Waiting for automatic connection...");
+  Serial.println("==================================\n");
+}
+
+void loop() {
+  // Nothing needed here - BLE handles everything
+  delay(10);
+}
