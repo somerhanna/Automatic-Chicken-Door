@@ -4,7 +4,7 @@ The ESP32 controls a 12V motor that is attached to a swing arm, allowing the doo
 
 The main purpose is to automate the door so that the owner does not need to manually release and close their chickens. The initial times are 5 am to open, 6 pm to close.
 
-An iOS app you can access from the iPhone to manually open and close, change the time of operations, and set other settings.
+Included is an iOS app you can access from the iPhone to manually open and close, change the time of operations, and control other settings.
 
 Video of my old build with servo motor:
 
