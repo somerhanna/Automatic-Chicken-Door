@@ -10,4 +10,4 @@ Video of my old build with servo motor:
 
 youtube.com/watch?v=uHuY0z5CEHo&feature=youtu.be
 
-ESP32 microcontroller, DRV8871 DC motor driver, 12V worm gear motor, IAN219 current detector, BH1750FVI light detector.
+ESP32 microcontroller, DRV8871 DC motor driver, 12V worm gear motor, IAN219 current detector, BH1750FVI light detector, 12V to 5V Buck Converter, OLED Display, Various Custom 3D Printed Parts.
