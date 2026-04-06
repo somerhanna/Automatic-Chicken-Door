@@ -1,0 +1,50 @@
+#define LED_BUILTIN 2
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(19, INPUT_PULLUP);
+  pinMode(18, INPUT_PULLUP);
+  pinMode(LED_BUILTIN, OUTPUT);
+  
+  Serial.println("\n=== Dual NC Switch Test ===");
+  Serial.println("Both switches: LED ON when pressed, OFF when released\n");
+}
+
+void loop() {
+  static int lastState19 = 0;
+  static int lastState18 = 0;
+  
+  int state19 = digitalRead(19);
+  int state18 = digitalRead(18);
+  
+  // Check if EITHER switch is pressed
+  bool anyPressed = (state19 == HIGH || state18 == HIGH);
+  
+  // Control LED based on any press
+  if (anyPressed) {
+    digitalWrite(LED_BUILTIN, HIGH);
+  } else {
+    digitalWrite(LED_BUILTIN, LOW);
+  }
+  
+  // Print individual switch changes
+  if (state19 != lastState19) {
+    if (state19 == HIGH) {
+      Serial.println(" Switch 1 (GPIO19) PRESSED");
+    } else {
+      Serial.println(" Switch 1 (GPIO19) RELEASED");
+    }
+    lastState19 = state19;
+  }
+  
+  if (state18 != lastState18) {
+    if (state18 == HIGH) {
+      Serial.println(" Switch 2 (GPIO18) PRESSED");
+    } else {
+      Serial.println(" Switch 2 (GPIO18) RELEASED");
+    }
+    lastState18 = state18;
+  }
+  
+  delay(20);
+}
