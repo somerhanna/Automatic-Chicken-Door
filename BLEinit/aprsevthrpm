@@ -1,0 +1,599 @@
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+#include <WiFi.h>
+#include <time.h>
+
+// WiFi Credentials
+const char* ssid = "Fairuz";
+const char* password = "ILoveMyKids1!";
+
+// NTP Server Settings
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = -28800;  // Eastern Time (USA)
+const int daylightOffset_sec = 3600;
+
+// Motor Timing
+const unsigned long MOTOR_RUN_TIME_MS = 6000;  // 6 seconds max run time
+
+// Schedule Times (24-hour format)
+int openHour = 10;
+int openMinute = 27;
+int closeHour = 18;
+int closeMinute = 0;
+bool scheduleEnabled = true;
+
+// Track last executed schedule times
+int lastExecutedOpenHour = -1;
+int lastExecutedOpenMinute = -1;
+int lastExecutedCloseHour = -1;
+int lastExecutedCloseMinute = -1;
+
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define SCHEDULE_UUID       "2a5c6d8e-1fb5-459e-8fcc-c5c9c331914b"
+
+// Motor Control Pins
+#define IN1 26
+#define IN2 27
+
+// Limit Switch Pins (NC switches)
+#define LIMIT_SWITCH_TOP    19
+#define LIMIT_SWITCH_BOTTOM 18
+
+// LED Pin
+#define LED_BUILTIN 2
+
+// Motor State Machine
+enum MotorState {
+  MOTOR_IDLE,
+  MOTOR_FORWARD,
+  MOTOR_REVERSE
+};
+
+MotorState currentState = MOTOR_IDLE;
+MotorState requestedState = MOTOR_IDLE;
+bool deviceConnected = false;
+bool limitTopActive = false;
+bool limitBottomActive = false;
+
+// Timing variables
+unsigned long motorStartTime = 0;
+bool motorTimingActive = false;
+bool timeoutTriggered = false;
+
+// Debounce for status updates
+unsigned long lastStatusSend = 0;
+const unsigned long STATUS_DEBOUNCE_MS = 100;
+
+// BLE Objects
+BLEServer *pServer = nullptr;
+BLECharacteristic *pMotorCharacteristic = nullptr;
+BLECharacteristic *pScheduleCharacteristic = nullptr;
+
+// Forward declarations
+void setMotorState(MotorState state);
+void sendStatus();
+void sendSchedule();
+void checkLimitSwitches();
+void printTime();
+void checkSchedule();
+void updateMotor();
+void emergencyStop(const char* reason);
+
+class MotorCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      String value = pCharacteristic->getValue().c_str();
+      
+      Serial.print("Command received: ");
+      Serial.println(value);
+      
+      if (value == "forward") {
+        setMotorState(MOTOR_FORWARD);
+      }
+      else if (value == "reverse") {
+        setMotorState(MOTOR_REVERSE);
+      }
+      else if (value == "stop") {
+        setMotorState(MOTOR_IDLE);
+      }
+      else if (value == "status") {
+        sendStatus();
+      }
+    }
+};
+
+class ScheduleCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      String value = pCharacteristic->getValue().c_str();
+      Serial.print("Schedule received: ");
+      Serial.println(value);
+      
+      // Format: "openHour,openMinute,closeHour,closeMinute,enabled"
+      int comma1 = value.indexOf(',');
+      int comma2 = value.indexOf(',', comma1 + 1);
+      int comma3 = value.indexOf(',', comma2 + 1);
+      int comma4 = value.indexOf(',', comma3 + 1);
+      
+      if (comma1 > 0 && comma2 > 0 && comma3 > 0 && comma4 > 0) {
+        int newOpenHour = value.substring(0, comma1).toInt();
+        int newOpenMinute = value.substring(comma1 + 1, comma2).toInt();
+        int newCloseHour = value.substring(comma2 + 1, comma3).toInt();
+        int newCloseMinute = value.substring(comma3 + 1, comma4).toInt();
+        bool newEnabled = value.substring(comma4 + 1).toInt() == 1;
+        
+        // Check if schedule times changed
+        bool openTimeChanged = (newOpenHour != openHour || newOpenMinute != openMinute);
+        bool closeTimeChanged = (newCloseHour != closeHour || newCloseMinute != closeMinute);
+        
+        // Update schedule
+        openHour = newOpenHour;
+        openMinute = newOpenMinute;
+        closeHour = newCloseHour;
+        closeMinute = newCloseMinute;
+        scheduleEnabled = newEnabled;
+        
+        // Reset last executed times ONLY if the schedule times changed
+        if (openTimeChanged) {
+          lastExecutedOpenHour = -1;
+          lastExecutedOpenMinute = -1;
+          Serial.println(" Open time changed - resetting execution flag");
+        }
+        if (closeTimeChanged) {
+          lastExecutedCloseHour = -1;
+          lastExecutedCloseMinute = -1;
+          Serial.println(" Close time changed - resetting execution flag");
+        }
+        
+        Serial.println(" Schedule updated:");
+        Serial.printf("  Open: %02d:%02d\n", openHour, openMinute);
+        Serial.printf("  Close: %02d:%02d\n", closeHour, closeMinute);
+        Serial.printf("  Enabled: %s\n", scheduleEnabled ? "Yes" : "No");
+        
+        sendSchedule();
+        sendStatus();
+      }
+    }
+    
+    void onRead(BLECharacteristic *pCharacteristic) {
+      sendSchedule();
+    }
+};
+
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println(" Client connected!");
+      sendStatus();
+      sendSchedule();
+    }
+    
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println(" Client disconnected");
+      delay(500);
+      pServer->startAdvertising();
+      Serial.println("Advertising restarted - waiting for connection");
+    }
+};
+
+void emergencyStop(const char* reason) {
+  // Immediately stop the motor - direct hardware override
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  
+  // Update state
+  currentState = MOTOR_IDLE;
+  requestedState = MOTOR_IDLE;
+  motorTimingActive = false;
+  
+  Serial.printf(" EMERGENCY STOP: %s\n", reason);
+  sendStatus();  // Send immediate status update
+}
+
+void checkLimitSwitches() {
+  bool topPressed = (digitalRead(LIMIT_SWITCH_TOP) == HIGH);
+  bool bottomPressed = (digitalRead(LIMIT_SWITCH_BOTTOM) == HIGH);
+  
+  // Control LED based on limit switch state
+  if (topPressed || bottomPressed) {
+    digitalWrite(LED_BUILTIN, HIGH);
+  } else {
+    digitalWrite(LED_BUILTIN, LOW);
+  }
+  
+  // Check for top limit state changes
+  if (topPressed != limitTopActive) {
+    limitTopActive = topPressed;
+    if (limitTopActive) {
+      Serial.println(" TOP LIMIT SWITCH TRIGGERED!");
+      if (currentState == MOTOR_FORWARD) {
+        emergencyStop("Top limit switch");
+      } else {
+        sendStatus();  // Send status even if motor wasn't moving
+      }
+    } else {
+      Serial.println("✓ TOP limit switch released");
+      sendStatus();  // Immediately notify app that limit is cleared
+    }
+  }
+  
+  // Check for bottom limit state changes
+  if (bottomPressed != limitBottomActive) {
+    limitBottomActive = bottomPressed;
+    if (limitBottomActive) {
+      Serial.println(" BOTTOM LIMIT SWITCH TRIGGERED!");
+      if (currentState == MOTOR_REVERSE) {
+        emergencyStop("Bottom limit switch");
+      } else {
+        sendStatus();  // Send status even if motor wasn't moving
+      }
+    } else {
+      Serial.println("✓ BOTTOM limit switch released");
+      sendStatus();  // Immediately notify app that limit is cleared
+    }
+  }
+}
+
+void updateMotor() {
+  // Check for timeout - but only if motor is actually running
+  if (motorTimingActive && (currentState == MOTOR_FORWARD || currentState == MOTOR_REVERSE)) {
+    if (millis() - motorStartTime >= MOTOR_RUN_TIME_MS) {
+      if (!timeoutTriggered) {
+        // Stop the motor immediately - direct hardware control
+        digitalWrite(IN1, LOW);
+        digitalWrite(IN2, LOW);
+        
+        // Update state
+        currentState = MOTOR_IDLE;
+        requestedState = MOTOR_IDLE;
+        motorTimingActive = false;
+        timeoutTriggered = true;
+        
+        Serial.println(" Motor timeout reached (6 seconds) - stopping");
+        sendStatus();
+      }
+      return;  // Exit early - timeout handled
+    }
+  }
+  
+  // Reset timeout trigger flag when motor is idle
+  if (currentState == MOTOR_IDLE) {
+    timeoutTriggered = false;
+  }
+  
+  // Apply requested state if different from current
+  if (requestedState != currentState) {
+    // Safety check with limit switches before changing state
+    if (requestedState == MOTOR_FORWARD && limitTopActive) {
+      Serial.println(" Cannot go FORWARD - Top limit switch active!");
+      requestedState = MOTOR_IDLE;
+      sendStatus();  // Send status to update app UI
+    }
+    else if (requestedState == MOTOR_REVERSE && limitBottomActive) {
+      Serial.println(" Cannot go REVERSE - Bottom limit switch active!");
+      requestedState = MOTOR_IDLE;
+      sendStatus();  // Send status to update app UI
+    }
+    
+    if (requestedState != currentState) {
+      currentState = requestedState;
+      
+      switch (currentState) {
+        case MOTOR_IDLE:
+          Serial.println("Motor: STOPPED");
+          digitalWrite(IN1, LOW);
+          digitalWrite(IN2, LOW);
+          motorTimingActive = false;
+          timeoutTriggered = false;
+          break;
+          
+        case MOTOR_FORWARD:
+          Serial.println("Motor: FORWARD (opening door) - will run max 6 seconds");
+          digitalWrite(IN1, HIGH);
+          digitalWrite(IN2, LOW);
+          motorStartTime = millis();
+          motorTimingActive = true;
+          timeoutTriggered = false;
+          break;
+          
+        case MOTOR_REVERSE:
+          Serial.println("Motor: REVERSE (closing door) - will run max 6 seconds");
+          digitalWrite(IN1, LOW);
+          digitalWrite(IN2, HIGH);
+          motorStartTime = millis();
+          motorTimingActive = true;
+          timeoutTriggered = false;
+          break;
+      }
+      
+      sendStatus();
+    }
+  }
+}
+
+void setMotorState(MotorState state) {
+  requestedState = state;
+}
+
+void sendStatus() {
+  // Debounce status sends to prevent BLE spam
+  if (!deviceConnected || pMotorCharacteristic == nullptr) return;
+  
+  unsigned long now = millis();
+  if (now - lastStatusSend < STATUS_DEBOUNCE_MS) return;
+  lastStatusSend = now;
+  
+  String status = "STATUS:";
+  switch (currentState) {
+    case MOTOR_IDLE: status += "IDLE"; break;
+    case MOTOR_FORWARD: status += "FORWARD"; break;
+    case MOTOR_REVERSE: status += "REVERSE"; break;
+  }
+  status += ",TOP:";
+  status += limitTopActive ? "ACTIVE" : "OK";
+  status += ",BOTTOM:";
+  status += limitBottomActive ? "ACTIVE" : "OK";
+  
+  pMotorCharacteristic->setValue(status.c_str());
+  pMotorCharacteristic->notify();
+  Serial.println(" Status sent: " + status);
+}
+
+void sendSchedule() {
+  if (deviceConnected && pScheduleCharacteristic != nullptr) {
+    String scheduleStr = String(openHour) + "," + 
+                        String(openMinute) + "," +
+                        String(closeHour) + "," +
+                        String(closeMinute) + "," +
+                        String(scheduleEnabled ? 1 : 0);
+    
+    pScheduleCharacteristic->setValue(scheduleStr.c_str());
+    pScheduleCharacteristic->notify();
+    Serial.println(" Schedule sent: " + scheduleStr);
+  }
+}
+
+void handleSerialCommands() {
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    command.toLowerCase();
+    
+    if (command == "f" || command == "forward") {
+      Serial.println("🔧 Manual: FORWARD");
+      setMotorState(MOTOR_FORWARD);
+    }
+    else if (command == "r" || command == "reverse") {
+      Serial.println("🔧 Manual: REVERSE");
+      setMotorState(MOTOR_REVERSE);
+    }
+    else if (command == "s" || command == "stop") {
+      Serial.println("🔧 Manual: STOP");
+      setMotorState(MOTOR_IDLE);
+    }
+    else if (command == "status") {
+      Serial.print("Motor: ");
+      switch(currentState) {
+        case MOTOR_IDLE: Serial.print("IDLE"); break;
+        case MOTOR_FORWARD: Serial.print("FORWARD"); break;
+        case MOTOR_REVERSE: Serial.print("REVERSE"); break;
+      }
+      Serial.print(" | Top: ");
+      Serial.print(limitTopActive ? "ACTIVE" : "OK");
+      Serial.print(" | Bottom: ");
+      Serial.println(limitBottomActive ? "ACTIVE" : "OK");
+      Serial.printf("Schedule: %s | Open: %02d:%02d | Close: %02d:%02d\n", 
+                    scheduleEnabled ? "ENABLED" : "DISABLED",
+                    openHour, openMinute, closeHour, closeMinute);
+      Serial.printf("Last executed - Open: %02d:%02d, Close: %02d:%02d\n",
+                    lastExecutedOpenHour, lastExecutedOpenMinute,
+                    lastExecutedCloseHour, lastExecutedCloseMinute);
+      if (motorTimingActive) {
+        unsigned long elapsed = millis() - motorStartTime;
+        Serial.printf("Motor running for: %lu ms of %lu ms max\n", elapsed, MOTOR_RUN_TIME_MS);
+      }
+      printTime();
+      sendStatus();  // Also send to connected app
+    }
+    else if (command == "help") {
+      Serial.println("\n Available commands:");
+      Serial.println("  forward / f  - Open door (runs max 6 seconds)");
+      Serial.println("  reverse / r  - Close door (runs max 6 seconds)");
+      Serial.println("  stop / s     - Stop motor immediately");
+      Serial.println("  status       - Show detailed status");
+      Serial.println("  help         - Show this help");
+    }
+    else if (command.length() > 0) {
+      Serial.println(" Unknown command. Type 'help'");
+    }
+  }
+}
+
+void printTime() {
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo)) {
+    char timeString[30];
+    strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    Serial.printf(" Current time: %s\n", timeString);
+  } else {
+    Serial.println(" Failed to obtain time");
+  }
+}
+
+void checkSchedule() {
+  if (!scheduleEnabled) return;
+  
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    return;
+  }
+  
+  int currentHour = timeinfo.tm_hour;
+  int currentMinute = timeinfo.tm_min;
+  
+  // Calculate total minutes for comparison
+  int currentTotalMinutes = currentHour * 60 + currentMinute;
+  int openTotalMinutes = openHour * 60 + openMinute;
+  int closeTotalMinutes = closeHour * 60 + closeMinute;
+  
+  // Check for opening time
+  if (currentTotalMinutes == openTotalMinutes) {
+    bool alreadyExecuted = (lastExecutedOpenHour == openHour && lastExecutedOpenMinute == openMinute);
+    
+    if (!alreadyExecuted) {
+      if (!limitTopActive) {
+        Serial.printf(" SCHEDULE: Opening door at %02d:%02d\n", currentHour, currentMinute);
+        setMotorState(MOTOR_FORWARD);
+        lastExecutedOpenHour = openHour;
+        lastExecutedOpenMinute = openMinute;
+      } else {
+        Serial.println("✓ Door already open - marking as executed");
+        lastExecutedOpenHour = openHour;
+        lastExecutedOpenMinute = openMinute;
+      }
+    }
+  }
+  
+  // Check for closing time
+  if (currentTotalMinutes == closeTotalMinutes) {
+    bool alreadyExecuted = (lastExecutedCloseHour == closeHour && lastExecutedCloseMinute == closeMinute);
+    
+    if (!alreadyExecuted) {
+      if (!limitBottomActive) {
+        Serial.printf(" SCHEDULE: Closing door at %02d:%02d\n", currentHour, currentMinute);
+        setMotorState(MOTOR_REVERSE);
+        lastExecutedCloseHour = closeHour;
+        lastExecutedCloseMinute = closeMinute;
+      } else {
+        Serial.println("✓ Door already closed - marking as executed");
+        lastExecutedCloseHour = closeHour;
+        lastExecutedCloseMinute = closeMinute;
+      }
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  // Initialize motor pins
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  
+  // Initialize LED
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  
+  // Initialize limit switches
+  pinMode(LIMIT_SWITCH_TOP, INPUT_PULLUP);
+  pinMode(LIMIT_SWITCH_BOTTOM, INPUT_PULLUP);
+  
+  Serial.println("\n==========================================");
+  Serial.println(" Chicken Door Motor Controller v2.2");
+  Serial.println("==========================================");
+  
+  // Connect to WiFi
+  Serial.printf("📡 Connecting to WiFi: %s", ssid);
+  WiFi.begin(ssid, password);
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n WiFi connected!");
+    Serial.print(" IP address: ");
+    Serial.println(WiFi.localIP());
+    
+    // Configure and get time
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    Serial.println("🕐 Syncing time with NTP...");
+    struct tm timeinfo;
+    int retry = 0;
+    while (!getLocalTime(&timeinfo) && retry < 10) {
+      delay(1000);
+      Serial.print(".");
+      retry++;
+    }
+    
+    if (getLocalTime(&timeinfo)) {
+      Serial.println("\n Time synchronized!");
+      printTime();
+    } else {
+      Serial.println("\n Time sync failed - schedule may not work");
+      scheduleEnabled = false;
+    }
+  } else {
+    Serial.println("\n WiFi connection failed - schedule disabled");
+    scheduleEnabled = false;
+  }
+  
+  Serial.println("\n Limit switches (NC type):");
+  Serial.println("  - Top switch: GPIO19 (stops OPEN)");
+  Serial.println("  - Bottom switch: GPIO18 (stops CLOSE)");
+  Serial.printf("\n Motor will run for maximum %d seconds\n", MOTOR_RUN_TIME_MS / 1000);
+  Serial.println(" Status auto-sent when limit switches change");
+  Serial.printf(" Schedule: %s\n", scheduleEnabled ? "ENABLED" : "DISABLED");
+  if (scheduleEnabled) {
+    Serial.printf("  Open at: %02d:%02d (executes once at exact time)\n", openHour, openMinute);
+    Serial.printf("  Close at: %02d:%02d (executes once at exact time)\n", closeHour, closeMinute);
+  }
+  
+  Serial.println("\n⌨️  Serial commands:");
+  Serial.println("  forward/f - Open door (runs max 6 seconds)");
+  Serial.println("  reverse/r - Close door (runs max 6 seconds)");
+  Serial.println("  stop/s    - Stop motor immediately");
+  Serial.println("  status    - Show detailed status");
+  Serial.println("  help      - Show this help");
+  
+  // Initialize BLE
+  BLEDevice::init("Chicken-Door");
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+  
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  
+  // Motor control characteristic
+  pMotorCharacteristic = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID,
+                      BLECharacteristic::PROPERTY_WRITE |
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+  pMotorCharacteristic->setCallbacks(new MotorCallbacks());
+  
+  // Schedule characteristic
+  pScheduleCharacteristic = pService->createCharacteristic(
+                      SCHEDULE_UUID,
+                      BLECharacteristic::PROPERTY_WRITE |
+                      BLECharacteristic::PROPERTY_READ |
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+  pScheduleCharacteristic->setCallbacks(new ScheduleCallbacks());
+  
+  pService->start();
+  
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);
+  pAdvertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
+  
+  Serial.println("\n BLE Ready - Device: Chicken-Door");
+  Serial.println(" App can now connect via Bluetooth");
+  Serial.println("==========================================\n");
+}
+
+void loop() {
+  checkLimitSwitches();   // Monitor limit switches (auto-sends status on changes)
+  updateMotor();          // Update motor state (handles timeout directly)
+  handleSerialCommands(); // Handle keyboard input
+  checkSchedule();        // Check automatic schedule
+  delay(10);              // Small delay to prevent watchdog issues
+}
