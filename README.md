@@ -4,8 +4,6 @@ The ESP32 controls a 12V motor that is attached to a swing arm, allowing the doo
 
 I have also built an iOS app you can access from the iPhone to manually open and close, change the time of operations, and control other settings.
 
-Video of my old build with servo motor:
+Video of my obsolete build with servo motor: youtube.com/watch?v=uHuY0z5CEHo&feature=youtu.be
 
-youtube.com/watch?v=uHuY0z5CEHo&feature=youtu.be
-
-ESP32 microcontroller, DRV8871 DC motor driver, 12V worm gear motor, IAN219 current detector, BH1750FVI light detector, 12V to 5V Buck Converter, OLED Display, Various Custom 3D Printed Parts.
+Parts List: ESP32 microcontroller, DRV8871 DC motor driver, 12V worm gear motor, IAN219 current detector, BH1750FVI light detector, 12V to 5V Buck Converter, OLED Display, Various Custom 3D Printed Utilities.
