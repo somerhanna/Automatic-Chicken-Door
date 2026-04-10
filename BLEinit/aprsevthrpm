@@ -1,4 +1,4 @@
-// 4/10 3 pm
+// 4/10 3:07 pm
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
@@ -172,6 +172,7 @@ String twoDigit(int value);
 String formatTime12Hour(int hour24, int minute);
 String getCurrentTimeMainString();
 String getCurrentTimeSuffix();
+String getCurrentDateString();
 
 // =====================================================
 // BLE Callbacks
@@ -341,6 +342,17 @@ String getCurrentTimeSuffix() {
   if (!getLocalTime(&timeinfo)) return "--";
 
   return (timeinfo.tm_hour >= 12) ? "PM" : "AM";
+}
+
+String getCurrentDateString() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) return "--/--/--";
+
+  int month = timeinfo.tm_mon + 1;
+  int day = timeinfo.tm_mday;
+  int year2 = (timeinfo.tm_year + 1900) % 100;
+
+  return twoDigit(month) + "/" + twoDigit(day) + "/" + twoDigit(year2);
 }
 
 // =====================================================
@@ -542,8 +554,8 @@ void drawSchedulePanel() {
     display.drawStr(x + 25, y + 8, "ON");
     display.setDrawColor(1);
   } else {
-    display.drawRFrame(x + 18, y + 2, 18, 8, 2);
-    display.drawStr(x + 21, y + 7, "OFF");
+    display.drawRFrame(x + 20, y + 2, 18, 8, 2);
+    display.drawStr(x + 24, y + 8, "OFF");
   }
 
   display.drawHLine(x + 3, y + 11, w - 6);
@@ -560,14 +572,14 @@ void drawSchedulePanel() {
 }
 
 void drawFooter() {
-  String left = getMotorStateText();
+  String left = getCurrentDateString() + "    " + getMotorStateText();
   String right = getDoorPositionText();
 
-  display.setFont(u8g2_font_4x6_tf);
+  display.setFont(u8g2_font_3x5im_tr);
 
-  display.drawRFrame(4, 52, 50, 10, 2);
+  display.drawRFrame(4, 52, 77, 10, 2);
   int lw = display.getStrWidth(left.c_str());
-  display.drawStr(4 + (50 - lw) / 2, 59, left.c_str());
+  display.drawStr(4 + (77 - lw) / 2, 59, left.c_str());
 
   if (right.length() > 0) {
     display.drawRFrame(88, 52, 36, 10, 2);
