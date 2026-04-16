@@ -175,7 +175,6 @@ void drawSchedulePanel();
 void drawFooter();
 int getMotorRunPercent();
 
-String getDoorPositionText();
 String getMotorStateText();
 String twoDigit(int value);
 String formatTime12Hour(int hour24, int minute);
@@ -382,12 +381,6 @@ String getMotorStateText() {
     case MOTOR_REVERSE: return "CLOSING";
   }
   return "UNKNOWN";
-}
-
-String getDoorPositionText() {
-  if (limitTopActive && !limitBottomActive) return "OPEN";
-  if (limitBottomActive && !limitTopActive) return "CLOSED";
-  return "";
 }
 
 String getCurrentTimeMainString() {
@@ -636,22 +629,15 @@ void drawSchedulePanel() {
   display.setFont(u8g2_font_3x5im_tr);
   display.drawStr(x + 4, y + 43, formatTime12Hour(closeHour, closeMinute).c_str());
 }
-
 void drawFooter() {
   String left = getCurrentDateString() + "    " + getMotorStateText();
-  String right = getDoorPositionText();
 
   display.setFont(u8g2_font_3x5im_tr);
 
   display.drawRFrame(4, 52, 77, 10, 2);
   int lw = display.getStrWidth(left.c_str());
   display.drawStr(4 + (77 - lw) / 2, 59, left.c_str());
-
-  if (right.length() > 0) {
-    display.drawRFrame(88, 52, 36, 10, 2);
-    int rw = display.getStrWidth(right.c_str());
-    display.drawStr(88 + (36 - rw) / 2, 59, right.c_str());
-  }
+  
 }
 
 void drawBootScreen() {
