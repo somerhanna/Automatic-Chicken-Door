@@ -24,6 +24,7 @@ bool oledReady = false;
 // =====================================================
 void initOLED() {
   Wire.begin(OLED_SDA, OLED_SCL);
+  Wire.setClock(400000); // 400kHz I2C speed
   display.begin();
   display.setContrast(255);
   oledReady = true;
