@@ -1,5 +1,17 @@
-automatic_chicken_door.ino is the monolithic code
+Tenatative To Do List... Ideas of New Features to Implement:
 
-currently modularizing
+1. RTOS Task Scheduler
 
-implementing RTOS tasks + adding new features
+2. Web Dashboard
+
+3. OTA Updates
+
+4. Event Logging + CSV Export
+
+5. Multi-Chip Communication w/ an STM32
+
+6. CI/CD Pipeline
+
+7. Cloud Integration to Store Event Logging
+
+8. Computer Vision w/ Camera to Detect Chickens
