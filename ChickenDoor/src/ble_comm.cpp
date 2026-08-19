@@ -6,6 +6,8 @@
 #include "schedule.h"
 #include "utils.h"
 
+//commit from VSCode
+
 // BLE connection state
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
