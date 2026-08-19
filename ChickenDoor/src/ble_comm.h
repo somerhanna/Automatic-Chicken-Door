@@ -8,6 +8,9 @@
 #include <BLE2902.h>
 
 // BLE connection state
+
+//add new comment 
+
 extern bool deviceConnected;
 extern bool oldDeviceConnected;
 extern bool restartAdvertisingRequested;
