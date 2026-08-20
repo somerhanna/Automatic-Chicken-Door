@@ -31,6 +31,8 @@ extern BLECharacteristic *pScheduleCharacteristic;
 void sendStatus(bool force = false);
 void sendSchedule();
 void startAdvertising(bool logMessage);
+void handleBLEConnection();
+void handleBLEAdvertising();
 
 // BLE callback classes
 class MotorCallbacks : public BLECharacteristicCallbacks {

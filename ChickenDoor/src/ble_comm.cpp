@@ -62,6 +62,37 @@ void initBLE() {
   Serial.println("==========================================\n");
 }
 
+
+void handleBLEConnection() {
+  if (!deviceConnected && oldDeviceConnected) {
+    Serial.println("Disconnect edge detected");
+    restartAdvertisingRequested = true;
+    oldDeviceConnected = deviceConnected;
+    updateDisplay(true);
+  }
+  else if (deviceConnected && !oldDeviceConnected) {
+    Serial.println("Connect edge detected");
+    oldDeviceConnected = deviceConnected;
+    updateDisplay(true);
+  }
+}
+
+void handleBLEAdvertising() {
+  if (!deviceConnected && restartAdvertisingRequested) {
+    delay(200);
+    startAdvertising(true);
+    restartAdvertisingRequested = false;
+    updateDisplay(true);
+  }
+
+  if (!deviceConnected &&
+      !advertisingActive &&
+      (millis() - lastAdvertisingStart > ADVERTISING_RECOVERY_INTERVAL_MS)) {
+    startAdvertising(false);
+    updateDisplay(true);
+  }
+}
+
 // =====================================================
 // BLE Callbacks
 // =====================================================
