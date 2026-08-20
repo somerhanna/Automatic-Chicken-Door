@@ -9,8 +9,6 @@
 
 // BLE connection state
 
-//add new comment add
-
 extern bool deviceConnected;
 extern bool oldDeviceConnected;
 extern bool restartAdvertisingRequested;
