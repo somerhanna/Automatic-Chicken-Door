@@ -20,64 +20,31 @@
 void setup() {
 
   init_Pins(); //Serial begin & Pin initialization
-
   loadScheduleFromPreferences(); // Load saved opening and closing time schedule from flash
-  
-  timeInitialized = syncTimeWithNTP();  // Sync time with NTP server and set timeInitialized flag
+  timeInitialized = syncTimeWithNTP();  // Connect to WiFi. Sync time with NTP server and set timeInitialized flag
 
-  initOLED(); // Initialize the SSD1309 OLED display
-
-  if (!timeInitialized) {
-  handleTimeInitFailure();
-  }
+  initOLED(timeInitialized); // Initialize the SSD1309 OLED display
 
   printInitStatus();  // Serial print info about the limit switches and motor run time
-
   printScheduleStatus();  // Serial print the current schedule status
 
   delay(500); // Wait a moment before starting BLE to ensure we do not spike current on power-up
-
   initBLE(); // Initialize BLE server and characteristics
 
-  setDisplayMode(DISPLAY_NORMAL);
-  
+  setDisplayMode(DISPLAY_NORMAL); //
   updateDisplay(true);
 }
 
-// =====================================================
-// Loop
-// =====================================================
 void loop() {
   checkLimitSwitches();
   updateMotor();
   handleSerialCommands();
   checkSchedule();
+  delay(10);
 
-  if (!deviceConnected && oldDeviceConnected) {
-    Serial.println("Disconnect edge detected");
-    restartAdvertisingRequested = true;
-    oldDeviceConnected = deviceConnected;
-    updateDisplay(true);
-  }
-  else if (deviceConnected && !oldDeviceConnected) {
-    Serial.println("Connect edge detected");
-    oldDeviceConnected = deviceConnected;
-    updateDisplay(true);
-  }
-
-  if (!deviceConnected && restartAdvertisingRequested) {
-    delay(200);
-    startAdvertising(true);
-    restartAdvertisingRequested = false;
-    updateDisplay(true);
-  }
-
-  if (!deviceConnected &&
-      !advertisingActive &&
-      (millis() - lastAdvertisingStart > ADVERTISING_RECOVERY_INTERVAL_MS)) {
-    startAdvertising(false);
-    updateDisplay(true);
-  }
+  handleBLEConnection();
+  handleBLEAdvertising();
+  delay(10);
 
   updateDisplay();
   delay(10);
