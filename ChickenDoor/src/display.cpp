@@ -22,7 +22,7 @@ bool oledReady = false;
 // =====================================================
 // OLED / SSD1309 UI
 // =====================================================
-void initOLED() {
+void initOLED(bool timeInitSuccess) {
   Wire.begin(OLED_SDA, OLED_SCL);
   //Wire.setClock(400000); // 400kHz I2C speed
   display.begin();
@@ -30,6 +30,10 @@ void initOLED() {
   oledReady = true;
   setDisplayMode(DISPLAY_BOOT, 1800);
   updateDisplay(true);
+    // Handle time sync failure on the display
+  if (!timeInitSuccess) {
+    handleTimeInitFailure();
+  }
 }
 
 void printInitStatus() {

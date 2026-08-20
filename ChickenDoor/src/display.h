@@ -49,5 +49,6 @@ void printInitStatus();
 void printScheduleStatus();
 void handleTimeInitFailure();
 void initBLE();
+void initOLED(bool timeInitSuccess);
 
 #endif // DISPLAY_H
