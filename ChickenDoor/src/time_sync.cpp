@@ -3,6 +3,7 @@
 #include <time.h>
 #include "config.h"
 #include "display.h"
+#include <esp_wifi.h>
 
 // Time sync
 bool timeInitialized = false;
@@ -14,6 +15,7 @@ int currentDay = -1;
 void disconnectWiFi() {
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
+  esp_wifi_stop();
   Serial.println("WiFi disconnected - running on BLE only");
 }
 
@@ -21,11 +23,14 @@ bool syncTimeWithNTP() {
   Serial.println("Connecting to WiFi for time sync...");
 
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(true);
+  WiFi.setTxPower(WIFI_POWER_MINUS_1dBm);
+  esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G);
   WiFi.begin(ssid, password);
 
   int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    delay(500);
+  while (WiFi.status() != WL_CONNECTED && attempts < 12) {
+    delay(300);
     Serial.print(".");
     attempts++;
     updateDisplay(true);
@@ -47,7 +52,7 @@ bool syncTimeWithNTP() {
   bool timeSynced = false;
 
   while (!getLocalTime(&timeinfo) && retry < 8) {
-    delay(1000);
+    delay(5000);
     Serial.print(".");
     retry++;
     updateDisplay(true);
@@ -64,6 +69,8 @@ bool syncTimeWithNTP() {
   }
 
   disconnectWiFi();
+  WiFi.mode(WIFI_OFF);
+  esp_wifi_stop();
   return timeSynced;
 }
 
