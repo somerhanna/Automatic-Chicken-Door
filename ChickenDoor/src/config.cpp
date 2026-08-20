@@ -17,4 +17,4 @@ const int daylightOffset_sec = 3600;
 // =====================================================
 // Motor Timing
 // =====================================================
-const unsigned long MOTOR_RUN_TIME_MS = 6000;
+const unsigned long MOTOR_RUN_TIME_MS = 4000;
