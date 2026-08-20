@@ -24,6 +24,7 @@ extern unsigned long motorStartTime;
 extern bool motorTimingActive;
 extern bool timeoutTriggered;
 
+void init_Pins();
 void setMotorState(MotorState state);
 void updateMotor();
 void checkLimitSwitches();

@@ -21,31 +21,16 @@
 // Setup
 // =====================================================
 void setup() {
-  Serial.begin(115200);
-  delay(2000);
 
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
+  init_Pins(); //Serial begin & Pin initialization
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
-
-  pinMode(LIMIT_SWITCH_TOP, INPUT_PULLUP);
-  pinMode(LIMIT_SWITCH_BOTTOM, INPUT_PULLUP);
-
-  Serial.println("\n==========================================");
-  Serial.println("Chicken Door Motor Controller v5.4 Persistent Storage");
-  Serial.println("==========================================");
-
-  // Load saved schedule from flash
-  loadScheduleFromPreferences();
+  loadScheduleFromPreferences(); // Load saved opening and closing time schedule from flash
 
   Serial.println("Getting initial time from NTP...");
+  
   timeInitialized = syncTimeWithNTP();
 
-    initOLED();
+  initOLED();
 
   if (!timeInitialized) {
     Serial.println("Could not get initial time - schedule disabled");

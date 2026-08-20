@@ -4,6 +4,30 @@
 #include "ble_comm.h"
 
 // =====================================================
+// Initalize GPIO pins
+// =====================================================
+
+  void init_Pins(){
+    
+  Serial.begin(115200);
+  delay(2000);
+
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+
+  pinMode(LIMIT_SWITCH_TOP, INPUT_PULLUP);
+  pinMode(LIMIT_SWITCH_BOTTOM, INPUT_PULLUP);
+
+  Serial.println("\n==========================================");
+  Serial.println("Chicken Door Motor Controller");
+  Serial.println("==========================================");}
+
+// =====================================================
 // Motor State
 // =====================================================
 MotorState currentState = MOTOR_IDLE;
