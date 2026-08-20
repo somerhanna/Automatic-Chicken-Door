@@ -28,6 +28,40 @@ BLEServer *pServer = nullptr;
 BLECharacteristic *pMotorCharacteristic = nullptr;
 BLECharacteristic *pScheduleCharacteristic = nullptr;
 
+void initBLE() {
+  BLEDevice::init("Chicken-Door");
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+
+  pMotorCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID,
+    BLECharacteristic::PROPERTY_WRITE |
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pMotorCharacteristic->setCallbacks(new MotorCallbacks());
+  pMotorCharacteristic->addDescriptor(new BLE2902());
+
+  pScheduleCharacteristic = pService->createCharacteristic(
+    SCHEDULE_UUID,
+    BLECharacteristic::PROPERTY_WRITE |
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pScheduleCharacteristic->setCallbacks(new ScheduleCallbacks());
+  pScheduleCharacteristic->addDescriptor(new BLE2902());
+
+  pService->start();
+  startAdvertising(true);
+
+  Serial.println("\nBLE Ready - Device: Chicken-Door");
+  Serial.println("App can now connect via Bluetooth");
+  Serial.println("SSD1309 OLED active on SDA=21, SCL=22");
+  Serial.println("Schedule is saved to flash memory (persists after reboot)");
+  Serial.println("==========================================\n");
+}
+
 // =====================================================
 // BLE Callbacks
 // =====================================================

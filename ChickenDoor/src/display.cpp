@@ -32,9 +32,31 @@ void initOLED() {
   updateDisplay(true);
 }
 
+void printInitStatus() {
+  Serial.println("\nLimit switches (NC type):");
+  Serial.println("  - Top switch: GPIO19 (stops OPEN)");
+  Serial.println("  - Bottom switch: GPIO18 (stops CLOSE)");
+  Serial.printf("\nMotor will run for maximum %lu seconds\n", MOTOR_RUN_TIME_MS / 1000);
+}
+
+void printScheduleStatus() {
+  Serial.printf("Schedule: %s\n", scheduleEnabled ? "ENABLED" : "DISABLED");
+  if (scheduleEnabled) {
+    Serial.printf("  Open at: %s\n", formatTime12Hour(openHour, openMinute).c_str());
+    Serial.printf("  Close at: %s\n", formatTime12Hour(closeHour, closeMinute).c_str());
+    Serial.println("  Time will resync automatically once per day");
+  }
+}
+
 void setDisplayMode(DisplayMode mode, unsigned long durationMs) {
   displayMode = mode;
   displayModeUntil = (durationMs > 0) ? millis() + durationMs : 0;
+}
+
+void handleTimeInitFailure() {
+  Serial.println("Could not get initial time - schedule disabled");
+  scheduleEnabled = false;
+  setDisplayMode(DISPLAY_NO_TIME, 2500);
 }
 
 void drawCenteredText(const String& text, int y, const uint8_t* font) {

@@ -45,5 +45,9 @@ void drawDoorMiniIcon(int x, int y, bool openDoor);
 void drawSchedulePanel();
 void drawFooter();
 int getMotorRunPercent();
+void printInitStatus();
+void printScheduleStatus();
+void handleTimeInitFailure();
+void initBLE();
 
 #endif // DISPLAY_H

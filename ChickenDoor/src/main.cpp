@@ -17,74 +17,30 @@
 #include "ble_comm.h"
 #include "serial_commands.h"
 
-// =====================================================
-// Setup
-// =====================================================
 void setup() {
 
   init_Pins(); //Serial begin & Pin initialization
 
   loadScheduleFromPreferences(); // Load saved opening and closing time schedule from flash
-
-  Serial.println("Getting initial time from NTP...");
   
-  timeInitialized = syncTimeWithNTP();
+  timeInitialized = syncTimeWithNTP();  // Sync time with NTP server and set timeInitialized flag
 
-  initOLED();
+  initOLED(); // Initialize the SSD1309 OLED display
 
   if (!timeInitialized) {
-    Serial.println("Could not get initial time - schedule disabled");
-    scheduleEnabled = false;
-    setDisplayMode(DISPLAY_NO_TIME, 2500);
+  handleTimeInitFailure();
   }
 
-  Serial.println("\nLimit switches (NC type):");
-  Serial.println("  - Top switch: GPIO19 (stops OPEN)");
-  Serial.println("  - Bottom switch: GPIO18 (stops CLOSE)");
-  Serial.printf("\nMotor will run for maximum %lu seconds\n", MOTOR_RUN_TIME_MS / 1000);
+  printInitStatus();  // Serial print info about the limit switches and motor run time
 
-  Serial.printf("Schedule: %s\n", scheduleEnabled ? "ENABLED" : "DISABLED");
-  if (scheduleEnabled) {
-    Serial.printf("  Open at: %s\n", formatTime12Hour(openHour, openMinute).c_str());
-    Serial.printf("  Close at: %s\n", formatTime12Hour(closeHour, closeMinute).c_str());
-    Serial.println("  Time will resync automatically once per day");
-  }
+  printScheduleStatus();  // Serial print the current schedule status
 
-  delay(500);
+  delay(500); // Wait a moment before starting BLE to ensure we do not spike current on power-up
 
-  BLEDevice::init("Chicken-Door");
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
-
-  BLEService *pService = pServer->createService(SERVICE_UUID);
-
-  pMotorCharacteristic = pService->createCharacteristic(
-    CHARACTERISTIC_UUID,
-    BLECharacteristic::PROPERTY_WRITE |
-    BLECharacteristic::PROPERTY_NOTIFY
-  );
-  pMotorCharacteristic->setCallbacks(new MotorCallbacks());
-  pMotorCharacteristic->addDescriptor(new BLE2902());
-
-  pScheduleCharacteristic = pService->createCharacteristic(
-    SCHEDULE_UUID,
-    BLECharacteristic::PROPERTY_WRITE |
-    BLECharacteristic::PROPERTY_READ |
-    BLECharacteristic::PROPERTY_NOTIFY
-  );
-  pScheduleCharacteristic->setCallbacks(new ScheduleCallbacks());
-  pScheduleCharacteristic->addDescriptor(new BLE2902());
-
-  pService->start();
-  startAdvertising(true);
-
-  Serial.println("\nBLE Ready - Device: Chicken-Door");
-  Serial.println("App can now connect via Bluetooth");
-  Serial.println("SSD1309 OLED active on SDA=21, SCL=22");
-  Serial.println("Schedule is saved to flash memory (persists after reboot)");
-  Serial.println("==========================================\n");
+  initBLE(); // Initialize BLE server and characteristics
 
   setDisplayMode(DISPLAY_NORMAL);
+  
   updateDisplay(true);
 }
 
