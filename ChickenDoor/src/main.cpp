@@ -18,7 +18,6 @@
 #include "serial_commands.h"
 
 void setup() {
-
   init_Pins(); //Serial begin & Pin initialization
   loadScheduleFromPreferences(); // Load saved opening and closing time schedule from flash
   timeInitialized = syncTimeWithNTP();  // Connect to WiFi. Sync time with NTP server and set timeInitialized flag
@@ -36,16 +35,16 @@ void setup() {
 }
 
 void loop() {
-  checkLimitSwitches();
-  updateMotor();
-  handleSerialCommands();
-  checkSchedule();
+  checkLimitSwitches(); // polling to see if the limit switches are active and update the state accordingly
+  updateMotor();  // move the motor if the requested state is different from the current state and handle timing out if the motor runs too long
+  handleSerialCommands(); // allow user input via serial console to control the motor and check status
+  checkSchedule(); // check if the current time matches the scheduled open or close time and execute the action if it does
   delay(10);
 
-  handleBLEConnection();
-  handleBLEAdvertising();
+  handleBLEConnection(); // handle BLE connection and disconnection events
+  handleBLEAdvertising(); // handle BLE advertising and restart advertising if needed
   delay(10);
 
-  updateDisplay();
+  updateDisplay(); // update the OLED display based on the current display mode and any changes that have occurred
   delay(10);
 }
