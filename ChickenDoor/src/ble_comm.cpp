@@ -142,7 +142,7 @@ void MyServerCallbacks::onDisconnect(BLEServer* pServer) {
 }
 
 // =====================================================
-// BLE Advertising zzzz
+// BLE Advertising
 // =====================================================
 void startAdvertising(bool logMessage) {
   BLEAdvertising *advertising = BLEDevice::getAdvertising();
