@@ -33,8 +33,9 @@ bool syncTimeWithNTP() {
     delay(300);
     Serial.print(".");
     attempts++;
-    updateDisplay(true);
   }
+
+  updateDisplay(true);
 
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("\nWiFi connection failed - time sync skipped");

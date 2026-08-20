@@ -42,10 +42,10 @@ void setup() {
   // Load saved schedule from flash
   loadScheduleFromPreferences();
 
-  initOLED();
-
   Serial.println("Getting initial time from NTP...");
   timeInitialized = syncTimeWithNTP();
+
+    initOLED();
 
   if (!timeInitialized) {
     Serial.println("Could not get initial time - schedule disabled");
@@ -64,6 +64,8 @@ void setup() {
     Serial.printf("  Close at: %s\n", formatTime12Hour(closeHour, closeMinute).c_str());
     Serial.println("  Time will resync automatically once per day");
   }
+
+  delay(500);
 
   BLEDevice::init("Chicken-Door");
   pServer = BLEDevice::createServer();
