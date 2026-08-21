@@ -22,6 +22,7 @@ void disconnectWiFi() {
 bool syncTimeWithNTP() {
   Serial.println("Connecting to WiFi for time sync from NTP...");
 
+  delay(400);
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(true);
   WiFi.setTxPower(WIFI_POWER_MINUS_1dBm);
