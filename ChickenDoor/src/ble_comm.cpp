@@ -246,6 +246,9 @@ void sendStatus(bool force) {
   if (!force && (now - lastStatusSend < STATUS_DEBOUNCE_MS)) return;
   lastStatusSend = now;
 
+  MotorState localState;
+  bool localTopActive, localBottomActive;
+
   String status = "STATUS:";
   switch (currentState) {
     case MOTOR_IDLE: status += "IDLE"; break;
