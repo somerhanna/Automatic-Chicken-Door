@@ -15,6 +15,8 @@ enum MotorState {
 extern MotorState currentState;
 extern MotorState requestedState;
 
+extern portMUX_TYPE motorMux;
+
 // Limit switch state
 extern bool limitTopActive;
 extern bool limitBottomActive;
