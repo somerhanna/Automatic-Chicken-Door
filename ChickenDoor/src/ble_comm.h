@@ -34,6 +34,7 @@ void sendSchedule();
 void startAdvertising(bool logMessage);
 void handleBLEConnection();
 void handleBLEAdvertising();
+void initBLE();
 
 // BLE callback classes
 class MotorCallbacks : public BLECharacteristicCallbacks {
