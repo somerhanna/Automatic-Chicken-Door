@@ -52,10 +52,12 @@ void emergencyStop(const char* reason) {
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, LOW);
 
+  portENTER_CRITICAL(&motorMux);
   currentState = MOTOR_IDLE;
   requestedState = MOTOR_IDLE;
   motorTimingActive = false;
   timeoutTriggered = false;
+  portEXIT_CRITICAL(&motorMux);
 
   Serial.printf("EMERGENCY STOP: %s\n", reason);
 
