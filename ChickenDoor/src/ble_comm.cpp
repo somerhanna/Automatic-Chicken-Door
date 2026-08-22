@@ -162,8 +162,8 @@ void ScheduleCallbacks::onWrite(BLECharacteristic *pCharacteristic) {
   portENTER_CRITICAL(&scheduleMux);
   openHour = newOpenHour;
   openMinute = newOpenMinute;
-  closeHour = newCloseHour;
-  closeMinute = newCloseMinute;
+  closeHour = newCloseHour;               // BLE writes updates as an interrupt on core 0 while core 1 is running main loop
+  closeMinute = newCloseMinute;           // small potential race condition :)
   scheduleEnabled = newEnabled;
   portEXIT_CRITICAL(&scheduleMux);
   // ============================================================
