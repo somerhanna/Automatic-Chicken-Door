@@ -186,7 +186,7 @@ void updateMotor() {
         break;
 
       case MOTOR_FORWARD:
-        Serial.println("Motor: FORWARD (opening door) - will run max 6 seconds");
+        Serial.println("Motor: FORWARD (opening door) - will run max 4 seconds");
         digitalWrite(IN1, HIGH);
         digitalWrite(IN2, LOW);
         motorStartTime = millis();
