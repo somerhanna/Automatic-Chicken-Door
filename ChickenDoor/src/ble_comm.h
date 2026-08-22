@@ -29,6 +29,12 @@ extern BLEServer *pServer;
 extern BLECharacteristic *pMotorCharacteristic;
 extern BLECharacteristic *pScheduleCharacteristic;
 
+//BLE pause/resume to prevent WiFi coexisting with it during daily nightly WiFi time sync
+extern bool bleTemporarilyStopped;
+void stopBLE();
+void resumeBLE();
+
+// BLE service and characteristic declarations
 void sendStatus(bool force = false);
 void sendSchedule();
 void startAdvertising(bool logMessage);

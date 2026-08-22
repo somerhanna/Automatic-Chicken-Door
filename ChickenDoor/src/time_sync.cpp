@@ -4,10 +4,12 @@
 #include "config.h"
 #include "display.h"
 #include <esp_wifi.h>
+#include "ble_comm.h"
 
 // Time sync
 bool timeInitialized = false;
 int currentDay = -1;
+bool timeSyncInProgress = false;
 
 // =====================================================
 // WiFi / Time
@@ -92,4 +94,15 @@ void printTime() {
   } else {
     Serial.println("Failed to obtain time");
   }
+}
+
+bool performSafeTimeSync() {
+  timeSyncInProgress = true;
+
+  stopBLE();      // radio must be free of BLE before WiFi comes up
+  bool result = syncTimeWithNTP();
+  resumeBLE();
+
+  timeSyncInProgress = false;
+  return result;
 }

@@ -17,6 +17,7 @@ bool restartAdvertisingRequested = false;
 bool advertisingActive = false;
 bool advertisingLoggedOnce = false;
 unsigned long lastAdvertisingStart = 0;
+bool bleTemporarilyStopped = false; // Flag to indicate if BLE is temporarily stopped for WiFi coexistence
 const unsigned long ADVERTISING_RECOVERY_INTERVAL_MS = 3000;
 
 // Status debounce
@@ -91,6 +92,31 @@ void handleBLEAdvertising() {
     startAdvertising(false);
     updateDisplay(true);
   }
+}
+
+void stopBLE() {                        //stopBLE() and resumeBLE() are used to temporarily stop BLE during WiFi time sync to prevent radio coexistence issues
+  if (bleTemporarilyStopped) return;
+
+  Serial.println("Pausing BLE before WiFi time sync (radio coexistence)");
+  BLEDevice::getAdvertising()->stop();
+  advertisingActive = false;
+
+  // Fully release the BT controller so WiFi doesn't fight it.
+  // Any connected client will be dropped - it can reconnect once sync finishes.
+  BLEDevice::deinit(true);
+
+  deviceConnected = false;
+  oldDeviceConnected = false;
+  bleTemporarilyStopped = true;
+}
+
+void resumeBLE() {
+  if (!bleTemporarilyStopped) return;
+
+  Serial.println("Resuming BLE after time sync");
+  initBLE();               // recreates server, characteristics, starts advertising
+  restartAdvertisingRequested = false;
+  bleTemporarilyStopped = false;
 }
 
 // =====================================================

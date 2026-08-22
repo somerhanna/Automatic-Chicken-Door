@@ -116,6 +116,13 @@ void checkSchedule() {
   int currentHour = timeinfo.tm_hour;
   int currentMinute = timeinfo.tm_min;
   int currentDayOfYear = timeinfo.tm_yday;
+
+  if (currentDayOfYear != currentDay) {
+  // Don't resync mid-move: the resync blocks the loop, and stopping BLE here
+  // would also cut off a client that's actively driving the motor.
+  if (currentState != MOTOR_IDLE) {
+    return;   // re-checked every loop iteration; will fire once motor goes idle
+  }
   
   if (currentDayOfYear != currentDay) {
     currentDay = currentDayOfYear;

@@ -310,6 +310,11 @@ void updateDisplay(bool force) {
     return;
   }
 
+  if (timeSyncInProgress) {
+  drawBigStatusScreen("SYNCING", "PLEASE WAIT", true);
+  return;
+}
+
   switch (displayMode) {
     case DISPLAY_BOOT:
       drawBootScreen();

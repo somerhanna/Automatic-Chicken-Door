@@ -6,7 +6,9 @@
 // Time sync
 extern bool timeInitialized;
 extern int currentDay;
+extern bool timeSyncInProgress;
 
+bool performSafeTimeSync();
 bool syncTimeWithNTP();
 void disconnectWiFi();
 void printTime();

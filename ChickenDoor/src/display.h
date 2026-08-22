@@ -16,7 +16,8 @@ enum DisplayMode {
   DISPLAY_LIMIT_TOP,
   DISPLAY_LIMIT_BOTTOM,
   DISPLAY_TIMEOUT,
-  DISPLAY_NO_TIME
+  DISPLAY_NO_TIME,
+  DISPLAY_SYNCING
 };
 
 extern DisplayMode displayMode;
