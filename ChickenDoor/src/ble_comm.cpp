@@ -249,17 +249,23 @@ void sendStatus(bool force) {
   MotorState localState;
   bool localTopActive, localBottomActive;
 
+  portENTER_CRITICAL(&motorMux);
+  localState = currentState;
+  localTopActive = limitTopActive;
+  localBottomActive = limitBottomActive;
+  portEXIT_CRITICAL(&motorMux);
+
   String status = "STATUS:";
-  switch (currentState) {
+  switch (localState) {
     case MOTOR_IDLE: status += "IDLE"; break;
     case MOTOR_FORWARD: status += "FORWARD"; break;
     case MOTOR_REVERSE: status += "REVERSE"; break;
   }
 
   status += ",TOP:";
-  status += limitTopActive ? "ACTIVE" : "OK";
+  status += localTopActive ? "ACTIVE" : "OK";
   status += ",BOTTOM:";
-  status += limitBottomActive ? "ACTIVE" : "OK";
+  status += localBottomActive ? "ACTIVE" : "OK";
 
   pMotorCharacteristic->setValue(std::string(status.c_str()));
   pMotorCharacteristic->notify();
