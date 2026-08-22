@@ -2,10 +2,12 @@
 #include "config.h"
 #include "display.h"
 #include "ble_comm.h"
+#include <freertos/FreeRTOS.h>
 
 // =====================================================
 // Initalize GPIO pins
 // =====================================================
+portMUX_TYPE motorMux = portMUX_INITIALIZER_UNLOCKED; 
 
   void init_Pins(){
     
@@ -29,7 +31,8 @@
 
 // =====================================================
 // Motor State
-// =====================================================
+// ====================================================
+
 MotorState currentState = MOTOR_IDLE;
 MotorState requestedState = MOTOR_IDLE;
 
@@ -114,16 +117,23 @@ void checkLimitSwitches() {
 // Motor
 // =====================================================
 void updateMotor() {
+  MotorState localRequested;
+  portENTER_CRITICAL(&motorMux);
+  localRequested = requestedState;
+  portEXIT_CRITICAL(&motorMux);
+
   if (motorTimingActive && (currentState == MOTOR_FORWARD || currentState == MOTOR_REVERSE)) {
     if (millis() - motorStartTime >= MOTOR_RUN_TIME_MS) {
       if (!timeoutTriggered) {
         digitalWrite(IN1, LOW);
         digitalWrite(IN2, LOW);
 
+        portENTER_CRITICAL(&motorMux);
         currentState = MOTOR_IDLE;
         requestedState = MOTOR_IDLE;
         motorTimingActive = false;
         timeoutTriggered = true;
+        portEXIT_CRITICAL(&motorMux);
 
         Serial.println("Motor timeout reached (6 seconds) - stopping");
         setDisplayMode(DISPLAY_TIMEOUT, 2500);
@@ -138,23 +148,29 @@ void updateMotor() {
     timeoutTriggered = false;
   }
 
-  if (requestedState != currentState) {
-    if (requestedState == MOTOR_FORWARD && limitTopActive) {
+  if (localRequested != currentState) {
+    if (localRequested == MOTOR_FORWARD && limitTopActive) {
       Serial.println("Cannot go FORWARD - Top limit switch active!");
+      portENTER_CRITICAL(&motorMux);
       requestedState = MOTOR_IDLE;
+      portEXIT_CRITICAL(&motorMux);
       setDisplayMode(DISPLAY_LIMIT_TOP, 2000);
       sendStatus(true);
       return;
     }
 
-    if (requestedState == MOTOR_REVERSE && limitBottomActive) {
+    if (localRequested == MOTOR_REVERSE && limitBottomActive) {
       Serial.println("Cannot go REVERSE - Bottom limit switch active!");
+      portENTER_CRITICAL(&motorMux);
       requestedState = MOTOR_IDLE;
+      portEXIT_CRITICAL(&motorMux);
       setDisplayMode(DISPLAY_LIMIT_BOTTOM, 2000);
       sendStatus(true);
       return;
     }
 
+
+    portENTER_CRITICAL(&motorMux);
     currentState = requestedState;
 
     switch (currentState) {
@@ -187,6 +203,7 @@ void updateMotor() {
         setDisplayMode(DISPLAY_CLOSING);
         break;
     }
+    portEXIT_CRITICAL(&motorMux);
 
     sendStatus(true);
     updateDisplay(true);
@@ -194,5 +211,7 @@ void updateMotor() {
 }
 
 void setMotorState(MotorState state) {
+  portENTER_CRITICAL(&motorMux);
   requestedState = state;
+  portEXIT_CRITICAL(&motorMux);
 }
