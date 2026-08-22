@@ -1,6 +1,6 @@
 #ifndef SCHEDULE_H
 #define SCHEDULE_H
-
+#include <freertos/FreeRTOS.h>
 #include <Arduino.h>
 
 // =====================================================
@@ -12,6 +12,7 @@ extern int openMinute;
 extern int closeHour;
 extern int closeMinute;
 extern bool scheduleEnabled;
+extern portMUX_TYPE scheduleMux;
 
 // Track last executed day-of-year
 extern int lastExecutedOpenDay;

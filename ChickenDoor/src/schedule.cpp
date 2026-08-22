@@ -5,12 +5,16 @@
 #include "display.h"
 #include "time_sync.h"
 #include "utils.h"
+#include <freertos/FreeRTOS.h>
 
 // =====================================================
 // Persistent Storage
 // =====================================================
 Preferences preferences;
 const char* PREF_NAMESPACE = "chicken_door";
+
+// Mutex for schedule variables to ensure atomic updates
+portMUX_TYPE scheduleMux = portMUX_INITIALIZER_UNLOCKED;
 
 // =====================================================
 // Schedule Times
@@ -91,16 +95,28 @@ void resetScheduleToDefaults() {
 // Time / Schedule
 // =====================================================
 void checkSchedule() {
-  if (!scheduleEnabled) return;
+  int localOpenHour, localOpenMinute, localCloseHour, localCloseMinute;
+  bool localEnabled;
+  
+  portENTER_CRITICAL(&scheduleMux);
+  localEnabled = scheduleEnabled;
+  localOpenHour = openHour;
+  localOpenMinute = openMinute;
+  localCloseHour = closeHour;
+  localCloseMinute = closeMinute;
+  portEXIT_CRITICAL(&scheduleMux);
+  
+  // Now use ONLY the local copies for the rest of the function
+  if (!localEnabled) return;
   if (!timeInitialized) return;
-
+  
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) return;
-
+  
   int currentHour = timeinfo.tm_hour;
   int currentMinute = timeinfo.tm_min;
   int currentDayOfYear = timeinfo.tm_yday;
-
+  
   if (currentDayOfYear != currentDay) {
     currentDay = currentDayOfYear;
     Serial.println("New day detected - resyncing time...");
@@ -113,8 +129,8 @@ void checkSchedule() {
   }
 
   int currentTotalMinutes = currentHour * 60 + currentMinute;
-  int openTotalMinutes = openHour * 60 + openMinute;
-  int closeTotalMinutes = closeHour * 60 + closeMinute;
+  int openTotalMinutes = localOpenHour * 60 + openMinute;
+  int closeTotalMinutes = localCloseHour * 60 + closeMinute;
 
   if (currentTotalMinutes == openTotalMinutes) {
     bool alreadyExecutedToday = (lastExecutedOpenDay == currentDayOfYear);

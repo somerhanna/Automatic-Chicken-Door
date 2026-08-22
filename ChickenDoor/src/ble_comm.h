@@ -6,6 +6,7 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 #include <BLE2902.h>
+#include <freertos/FreeRTOS.h>
 
 // BLE connection state
 

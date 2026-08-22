@@ -156,11 +156,17 @@ void ScheduleCallbacks::onWrite(BLECharacteristic *pCharacteristic) {
   bool openTimeChanged = (newOpenHour != openHour || newOpenMinute != openMinute);
   bool closeTimeChanged = (newCloseHour != closeHour || newCloseMinute != closeMinute);
 
+  // ============================================================
+  // CRITICAL SECTION: Write ALL schedule variables atomically
+  // ============================================================
+  portENTER_CRITICAL(&scheduleMux);
   openHour = newOpenHour;
   openMinute = newOpenMinute;
   closeHour = newCloseHour;
   closeMinute = newCloseMinute;
   scheduleEnabled = newEnabled;
+  portEXIT_CRITICAL(&scheduleMux);
+  // ============================================================
 
   // Save to persistent storage
   saveScheduleToPreferences();
