@@ -129,8 +129,8 @@ void checkSchedule() {
   }
 
   int currentTotalMinutes = currentHour * 60 + currentMinute;
-  int openTotalMinutes = localOpenHour * 60 + openMinute;
-  int closeTotalMinutes = localCloseHour * 60 + closeMinute;
+  int openTotalMinutes = localOpenHour * 60 + localOpenMinute;
+  int closeTotalMinutes = localCloseHour * 60 + localCloseMinute;
 
   if (currentTotalMinutes == openTotalMinutes) {
     bool alreadyExecutedToday = (lastExecutedOpenDay == currentDayOfYear);
