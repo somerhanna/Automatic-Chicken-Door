@@ -137,7 +137,7 @@ void updateMotor() {
         timeoutTriggered = true;
         portEXIT_CRITICAL(&motorMux);
 
-        Serial.println("Motor timeout reached (6 seconds) - stopping");
+        Serial.println("Motor timeout reached (4 seconds) - stopping");
         setDisplayMode(DISPLAY_TIMEOUT, 2500);
         sendStatus(true);
         updateDisplay(true);

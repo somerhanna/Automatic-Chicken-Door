@@ -116,20 +116,6 @@ void checkSchedule() {
   int currentHour = timeinfo.tm_hour;
   int currentMinute = timeinfo.tm_min;
   int currentDayOfYear = timeinfo.tm_yday;
-
-  if (currentDayOfYear != currentDay) {
-    if (currentState != MOTOR_IDLE) {
-      return;   // re-checked every loop iteration; will fire once motor goes idle; // Don't resync mid-move: the resync blocks the loop, and stopping BLE here
-    }
-    currentDay = currentDayOfYear;
-    Serial.println("New day detected - resyncing time..."); 
-    timeInitialized = syncTimeWithNTP();
-    if (!timeInitialized) {
-      setDisplayMode(DISPLAY_NO_TIME, 2500);
-    }
-    updateDisplay(true);
-    return;
-  }
   
   if (currentDayOfYear != currentDay) {
     if (currentState != MOTOR_IDLE) {
