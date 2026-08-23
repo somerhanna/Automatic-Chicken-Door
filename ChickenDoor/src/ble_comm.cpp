@@ -29,10 +29,14 @@ BLEServer *pServer = nullptr;
 BLECharacteristic *pMotorCharacteristic = nullptr;
 BLECharacteristic *pScheduleCharacteristic = nullptr;
 
+MotorCallbacks motorCallbacks;
+ScheduleCallbacks scheduleCallbacks;
+MyServerCallbacks serverCallbacks;
+
 void initBLE() {
   BLEDevice::init("Chicken-Door");
   pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
+  pServer->setCallbacks(&serverCallbacks);
 
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
@@ -41,7 +45,7 @@ void initBLE() {
     BLECharacteristic::PROPERTY_WRITE |
     BLECharacteristic::PROPERTY_NOTIFY
   );
-  pMotorCharacteristic->setCallbacks(new MotorCallbacks());
+  pMotorCharacteristic->setCallbacks(&motorCallbacks);
   pMotorCharacteristic->addDescriptor(new BLE2902());
 
   pScheduleCharacteristic = pService->createCharacteristic(
@@ -50,7 +54,7 @@ void initBLE() {
     BLECharacteristic::PROPERTY_READ |
     BLECharacteristic::PROPERTY_NOTIFY
   );
-  pScheduleCharacteristic->setCallbacks(new ScheduleCallbacks());
+  pScheduleCharacteristic->setCallbacks(&scheduleCallbacks);
   pScheduleCharacteristic->addDescriptor(new BLE2902());
 
   pService->start();

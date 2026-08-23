@@ -8,6 +8,26 @@
 #include <BLE2902.h>
 #include <freertos/FreeRTOS.h>
 
+// BLE callback classes
+class MotorCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) override;
+};
+
+class ScheduleCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) override;
+  void onRead(BLECharacteristic *pCharacteristic) override;
+};
+
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) override;
+  void onDisconnect(BLEServer* pServer) override;
+};
+
+// these avoids leaking a new set of callback objects on every daily BLE restart.
+extern MotorCallbacks motorCallbacks;
+extern ScheduleCallbacks scheduleCallbacks;
+extern MyServerCallbacks serverCallbacks;
+
 // BLE connection state
 
 extern bool deviceConnected;
@@ -41,20 +61,5 @@ void startAdvertising(bool logMessage);
 void handleBLEConnection();
 void handleBLEAdvertising();
 void initBLE();
-
-// BLE callback classes
-class MotorCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharacteristic) override;
-};
-
-class ScheduleCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharacteristic) override;
-  void onRead(BLECharacteristic *pCharacteristic) override;
-};
-
-class MyServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer* pServer) override;
-  void onDisconnect(BLEServer* pServer) override;
-};
 
 #endif // BLE_COMM_H
