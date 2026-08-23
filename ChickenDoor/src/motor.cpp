@@ -80,9 +80,24 @@ void checkLimitSwitches() {
 
   digitalWrite(LED_BUILTIN, (topPressed || bottomPressed) ? HIGH : LOW);
 
+  bool topChanged = false, bottomChanged = false;
+  bool localTopActive, localBottomActive;
+
+  portENTER_CRITICAL(&motorMux);
   if (topPressed != limitTopActive) {
     limitTopActive = topPressed;
-    if (limitTopActive) {
+    topChanged = true;
+  }
+  if (bottomPressed != limitBottomActive) {
+    limitBottomActive = bottomPressed;
+    bottomChanged = true;
+  }
+  localTopActive = limitTopActive;
+  localBottomActive = limitBottomActive;
+  portEXIT_CRITICAL(&motorMux);
+
+  if (topChanged) {
+    if (localTopActive) {
       Serial.println("TOP LIMIT SWITCH TRIGGERED!");
       if (currentState == MOTOR_FORWARD) {
         emergencyStop("Top limit switch");
@@ -97,9 +112,8 @@ void checkLimitSwitches() {
     }
   }
 
-  if (bottomPressed != limitBottomActive) {
-    limitBottomActive = bottomPressed;
-    if (limitBottomActive) {
+  if (bottomChanged) {
+    if (localBottomActive) {
       Serial.println("BOTTOM LIMIT SWITCH TRIGGERED!");
       if (currentState == MOTOR_REVERSE) {
         emergencyStop("Bottom limit switch");
