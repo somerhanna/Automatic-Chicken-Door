@@ -6,7 +6,7 @@
 #include "schedule.h"
 #include "utils.h"
 
-//commit from VSCode
+//commit from VSCode & Ubuntu
 
 // BLE connection state
 bool deviceConnected = false;
