@@ -6,4 +6,4 @@ I also built an iOS app you can access from the iPhone to manually open and clos
 
 Parts List: ESP32 microcontroller, DRV8871 DC motor driver, 12V worm gear motor, IAN219 current detector, BH1750FVI light detector, 12V to 5V Buck Converter, 2.4" OLED Display, Custom 3D Printed Utilities.
 
-DEMO: https://www.youtube.com/watch?v=gjSW2zDPhTc
+DEMO: https://www.youtube.com/watch?v=S-3rC9S5BCw
