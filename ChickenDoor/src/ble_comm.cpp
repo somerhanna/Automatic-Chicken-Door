@@ -123,9 +123,9 @@ void resumeBLE() {
   bleTemporarilyStopped = false;
 }
 
-// =====================================================
+// =================================================
 // BLE Callbacks
-// =====================================================
+// =================================================
 void MotorCallbacks::onWrite(BLECharacteristic *pCharacteristic) {
   String value = String(pCharacteristic->getValue().c_str());
   value.trim();
