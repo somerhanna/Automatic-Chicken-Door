@@ -7,10 +7,10 @@
 extern const char* ssid;
 extern const char* password;
 
-// =====================================================
+// ===================================================
 // NTP Server Settings
 // NOTE: Pacific Time with DST
-// =====================================================
+// ===================================================
 extern const char* ntpServer;
 extern const long gmtOffset_sec;
 extern const int daylightOffset_sec;
