@@ -22,7 +22,7 @@ void setup() {
   loadScheduleFromPreferences(); // Load saved opening and closing time schedule from flash
   timeInitialized = syncTimeWithNTP();  // Connect to WiFi. Sync time with NTP server and set timeInitialized flag
 
-  initOLED(timeInitialized); // Initialize the SSD1309 OLED display
+  initOLED(timeInitialized); // Initialize the SSD1309 OLED display commit
 
   printInitStatus();  // Serial print info about the limit switches and motor run time
   printScheduleStatus();  // Serial print the current schedule status
